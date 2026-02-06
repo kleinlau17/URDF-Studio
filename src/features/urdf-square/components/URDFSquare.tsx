@@ -359,39 +359,32 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
     
     setIsDownloading(true);
     try {
-      const manifestUrl = `${model.urdfPath}/manifest.json`;
-      const manifestRes = await fetch(manifestUrl);
-      if (!manifestRes.ok) throw new Error('Manifest not found');
-      const files: string[] = await manifestRes.json();
+      // Request backend to download model (e.g. from Baidu Cloud)
+      const token = (import.meta as any).env.VITE_API_TOKEN;
+      const response = await fetch('/api/download-model', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ urdfPath: model.urdfPath }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Backend request failed: ${response.statusText}`);
+      }
+
+      // TODO: Handle backend response (e.g. process returned files)
+      console.log('Model download request sent for:', model.urdfPath);
       
-      const fileObjects = await Promise.all(files.map(async (filePath) => {
-          const res = await fetch(`${model.urdfPath}/${filePath}`);
-          const blob = await res.blob();
-          const fileName = filePath.split('/').pop()!;
-          const file = new File([blob], fileName, { type: blob.type });
-          
-          const rootFolder = model.urdfPath?.split('/').pop() || model.name.replace(/\s+/g, '_');
-          Object.defineProperty(file, 'webkitRelativePath', {
-              value: `${rootFolder}/${filePath}`
-          });
-          
-          return file;
-      }));
-      
-      const mockEvent = {
-          target: {
-              files: fileObjects
-          }
-      } as unknown as React.ChangeEvent<HTMLInputElement>;
-      
-      onImport(mockEvent);
       setIsDownloading(false);
       onClose();
+      alert(lang === 'zh' ? '下载请求已发送给后端' : 'Download request sent to backend');
       
     } catch (err) {
       setIsDownloading(false);
       console.error('Failed to import model:', err);
-      alert(lang === 'zh' ? '加载模型文件失败，请确保 manifest.json 存在。' : 'Failed to load model files. Please ensure manifest.json exists.');
+      alert(lang === 'zh' ? '请求后端失败' : 'Failed to request backend');
     }
   };
 

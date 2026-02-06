@@ -352,73 +352,10 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
     };
   }, [isResizing, resizeDirection, position.x, position.y]);
 
-  const downloadFromGithub = async (model: RobotModel) => {
-    if (!model.urdfPath) return;
-    setIsDownloading(true);
 
-    try {
-      const url = new URL(model.urdfPath);
-      const parts = url.pathname.split('/').filter(Boolean);
-      const owner = parts[0];
-      const repo = parts[1];
-      const branch = parts[3];
-      const path = parts.slice(4).join('/');
-
-      if (!(window as any).showDirectoryPicker) {
-        throw new Error(lang === 'zh' ? '您的浏览器不支持文件系统访问 API' : 'Your browser does not support File System Access API');
-      }
-      const dirHandle = await (window as any).showDirectoryPicker({
-        mode: 'readwrite',
-        startIn: 'downloads'
-      });
-
-      const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${path}?ref=${branch}`;
-      const response = await fetch(apiUrl);
-      if (!response.ok) throw new Error('GitHub API request failed');
-      const contents = await response.json();
-
-      const downloadRecursive = async (items: any[], currentHandle: FileSystemDirectoryHandle) => {
-        for (const item of items) {
-          if (item.type === 'file') {
-            const fileRes = await fetch(item.download_url);
-            const blob = await fileRes.blob();
-            const fileHandle = await currentHandle.getFileHandle(item.name, { create: true });
-            const writable = await fileHandle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-          } else if (item.type === 'dir') {
-            const newDirHandle = await currentHandle.getDirectoryHandle(item.name, { create: true });
-            const subDirRes = await fetch(item.url);
-            const subDirItems = await subDirRes.json();
-            await downloadRecursive(subDirItems, newDirHandle);
-          }
-        }
-      };
-
-      await downloadRecursive(Array.isArray(contents) ? contents : [contents], dirHandle);
-      
-      setIsDownloading(false);
-      if (confirm(lang === 'zh' ? '下载完成！是否立即从本地文件夹加载该模型？' : 'Download complete! Would you like to load the model from the local folder now?')) {
-        onClose();
-        alert(lang === 'zh' ? '请点击主界面的"导入本地 URDF"并选择刚才下载的文件夹。' : 'Please click "Import Local URDF" on the main screen and select the folder you just downloaded.');
-      }
-      
-    } catch (err: any) {
-      setIsDownloading(false);
-      console.error('Github download failed:', err);
-      if (err.name !== 'AbortError') {
-        alert(lang === 'zh' ? `下载失败: ${err.message}` : `Download failed: ${err.message}`);
-      }
-    }
-  };
 
   const handleImportModel = async (model: RobotModel) => {
     if (!model.urdfPath) return;
-
-    if (model.sourceType === 'url') {
-      await downloadFromGithub(model);
-      return;
-    }
     
     setIsDownloading(true);
     try {

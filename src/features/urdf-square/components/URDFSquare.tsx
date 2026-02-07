@@ -374,17 +374,60 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
         throw new Error(`Backend request failed: ${response.statusText}`);
       }
 
-      // TODO: Handle backend response (e.g. process returned files)
-      console.log('Model download request sent for:', model.urdfPath);
+      const result = await response.json();
+      if (!result.success || !result.data?.files) {
+         throw new Error(result.message || 'Failed to list files');
+      }
+
+      const filesData = result.data.files as { path: string, url: string }[];
       
+      // Determine root folder name based on urdfPath (e.g. "go2_description")
+      const rootFolderName = model.urdfPath.split('/').filter(Boolean).pop() || model.id;
+
+      // Download all files in parallel
+      const fileObjects = await Promise.all(filesData.map(async (fileInfo) => {
+          const res = await fetch(fileInfo.url);
+          if (!res.ok) throw new Error(`Failed to download ${fileInfo.path}`);
+          const blob = await res.blob();
+          
+          // Get filename from path
+          const fileName = fileInfo.path.split('/').pop() || 'unknown';
+          
+          const file = new File([blob], fileName, { type: blob.type });
+          
+          // Set webkitRelativePath property (critical for folder structure)
+          // Ensure path separators are normalized if needed, though they usually come as /
+          const relativePath = `${rootFolderName}/${fileInfo.path}`;
+          
+          Object.defineProperty(file, 'webkitRelativePath', {
+              value: relativePath
+          });
+          
+          return file;
+      }));
+
+      // Create mock event
+      const mockEvent = {
+          target: {
+              files: fileObjects
+          }
+      } as unknown as React.ChangeEvent<HTMLInputElement>;
+
+      // Trigger import
+      onImport(mockEvent);
       setIsDownloading(false);
       onClose();
-      alert(lang === 'zh' ? '下载请求已发送给后端' : 'Download request sent to backend');
       
-    } catch (err) {
+    } catch (err: any) {
       setIsDownloading(false);
-      console.error('Failed to import model:', err);
-      alert(lang === 'zh' ? '请求后端失败' : 'Failed to request backend');
+      console.error('Failed to import model details:', {
+        message: err.message,
+        stack: err.stack,
+        original: err
+      });
+      alert(lang === 'zh' 
+        ? `请求后端失败: ${err.message}` 
+        : `Failed to request backend: ${err.message}`);
     }
   };
 

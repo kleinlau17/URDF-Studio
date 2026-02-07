@@ -19,14 +19,7 @@ if (Auth && Auth.prototype) {
     Auth.prototype.getTimestamp = function(timestamp) {
         let dateObj = timestamp;
         
-        // If no timestamp provided, use current time
-        if (!dateObj) {
-            dateObj = new Date();
-        } else if (!(dateObj instanceof Date)) {
-             // If it's a number/string, parse it
-             dateObj = new Date(dateObj);
-        }
-        
+        dateObj = new Date();
         // Final safety check
         if (isNaN(dateObj.getTime())) {
             console.warn('[Backend Warning] Invalid date detected in SDK Auth, using current time fallback');
@@ -71,7 +64,7 @@ const authenticateToken = (req, res, next) => {
   if (token == null) return res.sendStatus(401); // No token present
 
   if (token !== API_TOKEN) {
-    console.log(`[Backend] Auth failed. Received: ${token}, Expected: ${API_TOKEN}`);
+    console.log(`[Backend] Auth failed.`);
     return res.sendStatus(403); // Invalid token
   }
 
@@ -91,26 +84,51 @@ app.post('/api/download-model', authenticateToken, async (req, res) => {
       // Normalize urdfPath to remove leading slash
       const prefix = urdfPath.startsWith('/') ? urdfPath.slice(1) : urdfPath;
       
-      // Clean up path and append test.urdf
-      // Ensures we don't have double slashes if prefix ends with /
-      const cleanPrefix = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
-      const objectKey = `${cleanPrefix}/urdf/go2_description.urdf`;
+      // Ensure prefix ends with / to list all files in directory
+      const dirPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
 
-      console.log(`[Backend] Generating presigned URL for: ${objectKey}`);
+      console.log(`[Backend] Listing objects for prefix: ${dirPrefix}`);
 
-      // Generate presigned URL (expires in 1800s - 30 mins)
-      const downloadUrl = client.generatePresignedUrl(bucketName, objectKey, {
-          expirationInSeconds: 1800
-      });
+      // List all objects under the prefix
+      const response = await client.listObjects(bucketName, { prefix: dirPrefix });
+      
+      if (!response.body || !response.body.contents) {
+          return res.json({ 
+              success: true, 
+              message: 'No files found', 
+              data: { files: [] } 
+          });
+      }
 
-      console.log(`[Backend] Generated URL: ${downloadUrl}`);
+      // Map to relative paths and generate presigned URLs
+      const files = response.body.contents
+        .map(item => {
+            // Remove prefix to get relative path
+            const relativePath = item.key.slice(dirPrefix.length);
+            
+            // Skip directory markers or empty names
+            if (!relativePath) return null;
+
+            // Use 1800s (30min) expiration to match server.js and avoid potential SDK timestamp issues with patch
+            const downloadUrl = client.generatePresignedUrl(bucketName, item.key, {
+                expirationInSeconds: 1800
+            });
+
+            return {
+                path: relativePath,
+                url: downloadUrl
+            };
+        })
+        .filter(item => item !== null);
+
+      console.log(`[Backend] Found ${files.length} files`);
+      console.log('[Backend] Generated files list:', JSON.stringify(files, null, 2));
 
       res.json({ 
           success: true, 
-          message: 'Download URL generated successfully',
+          message: 'Files listed successfully',
           data: {
-              downloadUrl: downloadUrl,
-              expiresIn: 1800
+              files: files
           }
       });
   } catch (error) {

@@ -15,6 +15,7 @@ export const zh: TranslationKeys = {
   noModelsFound: "未找到相关模型",
   changeSearchKeywords: "尝试更换搜索关键词或分类",
   categories: "分类",
+  tags: "标签",
   allModels: "全部模型",
   // New Categories
   fullRobots: "本体资产",

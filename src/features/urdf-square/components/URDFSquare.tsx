@@ -67,6 +67,31 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
   const t = translations[lang];
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  
+  // Clear tags when language changes to avoid stale strings
+  useEffect(() => {
+    setSelectedTags([]);
+  }, [lang]);
+
+  // Compute all available tags
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    URDF_STUDIO_MODELS.forEach(model => {
+      const currentTags = lang === 'zh' && model.tags_zh ? model.tags_zh : model.tags;
+      currentTags.forEach(t => tags.add(t));
+    });
+    return Array.from(tags).sort();
+  }, [lang]);
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) 
+        ? prev.filter(t => t !== tag) 
+        : [...prev, tag]
+    );
+  };
+
   const [isDownloading, setIsDownloading] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -274,13 +299,31 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
 
   const filteredModels = useMemo(() => {
     return URDF_STUDIO_MODELS.filter(model => {
-      const matchesSearch = model.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            model.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            model.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-      const matchesCategory = selectedCategory === 'all' || model.category === selectedCategory;
-      return matchesSearch && matchesCategory;
+      // 1. Category Filter
+      if (selectedCategory !== 'all' && model.category !== selectedCategory) {
+        return false;
+      }
+      
+      // 2. Tag Filter (Matches ALL selected tags)
+      if (selectedTags.length > 0) {
+        const modelTags = lang === 'zh' && model.tags_zh ? model.tags_zh : model.tags;
+        const hasAllTags = selectedTags.every(tag => modelTags.includes(tag));
+        if (!hasAllTags) return false;
+      }
+
+      // 3. Search Filter
+      const searchLower = searchQuery.toLowerCase();
+      const name = (lang === 'zh' && model.name_zh ? model.name_zh : model.name).toLowerCase();
+      const desc = (lang === 'zh' && model.description_zh ? model.description_zh : model.description).toLowerCase();
+      const tags = (lang === 'zh' && model.tags_zh ? model.tags_zh : model.tags).map(t => t.toLowerCase());
+
+      const matchesSearch = name.includes(searchLower) || 
+                            desc.includes(searchLower) ||
+                            tags.some(tag => tag.includes(searchLower));
+
+      return matchesSearch;
     });
-  }, [searchQuery, selectedCategory]);
+  }, [searchQuery, selectedCategory, selectedTags, lang]);
 
   const toggleMaximize = () => {
     setIsMaximized(!isMaximized);
@@ -446,6 +489,31 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
                         {getCategoryName(cat.id, t)}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* Tags Section */}
+                <div>
+                  <h3 className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2">
+                    {t.tags}
+                  </h3>
+                  <div className="flex flex-wrap gap-1.5 px-2">
+                    {allTags.map(tag => {
+                      const isSelected = selectedTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          onClick={() => toggleTag(tag)}
+                          className={`px-2 py-1 text-[10px] rounded-md transition-all border ${
+                            isSelected 
+                              ? 'bg-[#0060FA] text-white border-[#0060FA]' 
+                              : 'bg-white dark:bg-black text-slate-600 dark:text-slate-400 border-slate-200 dark:border-border-black hover:border-slate-300 dark:hover:border-slate-600'
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

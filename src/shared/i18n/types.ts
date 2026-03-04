@@ -15,6 +15,7 @@ export interface TranslationKeys {
   noModelsFound: string;
   changeSearchKeywords: string;
   categories: string;
+  tags: string;
   allModels: string;
   // New Categories
   fullRobots: string;

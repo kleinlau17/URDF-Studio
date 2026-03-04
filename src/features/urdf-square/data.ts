@@ -32,9 +32,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 1250,
     downloads: 3200,
-    tags: ['Research', 'Quadruped', 'Mobile'],
-    tags_zh: ['科研', '四足', '移动'],
-    lastUpdated: '2026-01-17',
+    // 结构与要素：四足；用途：科研；特点：高性能
+    tags: ['Quadruped', 'Research', 'High-Performance'],
+    tags_zh: ['四足', '科研', '高性能'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/go2_description'
   },
   {
@@ -49,9 +50,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 980,
     downloads: 2100,
-    tags: ['Education', 'Quadruped', 'Beginner'],
-    tags_zh: ['教育', '四足', '入门'],
-    lastUpdated: '2026-01-15',
+    // 结构与要素：四足；用途：教育、科研；特点：入门
+    tags: ['Quadruped', 'Education', 'Research', 'Beginner'],
+    tags_zh: ['四足', '教育', '科研', '入门'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/go1_description'
   },
   {
@@ -66,9 +68,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 2100,
     downloads: 4500,
-    tags: ['Humanoid', 'Bipedal', 'Research'],
-    tags_zh: ['人形', '双足', '科研'],
-    lastUpdated: '2026-01-17',
+    // 结构与要素：人形、双足；用途：教育、科研；特点：通用
+    tags: ['Humanoid', 'Bipedal', 'Education', 'Research', 'General-Purpose'],
+    tags_zh: ['人形', '双足', '教育', '科研', '通用'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/g1_description',
     urdfFile: 'g1_29dof_with_hand.urdf'
   },
@@ -84,9 +87,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 1800,
     downloads: 3800,
-    tags: ['Humanoid', 'High-Performance', 'Research'],
-    tags_zh: ['人形', '高性能', '科研'],
-    lastUpdated: '2026-01-16',
+    // 结构与要素：人形、双足；用途：科研；特点：高性能
+    tags: ['Humanoid', 'Bipedal', 'Research', 'High-Performance'],
+    tags_zh: ['人形', '双足', '科研', '高性能'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/h1_description'
   },
   {
@@ -101,9 +105,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 1500,
     downloads: 2800,
-    tags: ['Humanoid', 'Bipedal', 'Next-Gen'],
-    tags_zh: ['人形', '双足', '新一代'],
-    lastUpdated: '2026-01-18',
+    // 结构与要素：人形、双足；用途：科研；特点：新一代、高性能
+    tags: ['Humanoid', 'Bipedal', 'Research', 'Next-Gen', 'High-Performance'],
+    tags_zh: ['人形', '双足', '科研', '新一代', '高性能'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/h1_2_description'
   },
   {
@@ -118,9 +123,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 2300,
     downloads: 4900,
-    tags: ['Humanoid', 'High-Performance', 'Full-Size', 'Research'],
-    tags_zh: ['人形', '高性能', '全尺寸', '科研'],
-    lastUpdated: '2026-02-28',
+    // 结构与要素：人形、双足、全尺寸；用途：科研；特点：高性能、新一代
+    tags: ['Humanoid', 'Bipedal', 'Full-Size', 'Research', 'High-Performance', 'Next-Gen'],
+    tags_zh: ['人形', '双足', '全尺寸', '科研', '高性能', '新一代'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/h2_description'
   },
   {
@@ -135,9 +141,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 1100,
     downloads: 2500,
-    tags: ['Research', 'Quadruped', 'Agile'],
-    tags_zh: ['科研', '四足', '敏捷'],
-    lastUpdated: '2026-01-14',
+    // 结构与要素：四足；用途：科研；特点：敏捷
+    tags: ['Quadruped', 'Research', 'Agile'],
+    tags_zh: ['四足', '科研', '敏捷'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/a1_description'
   },
   {
@@ -152,9 +159,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 750,
     downloads: 1800,
-    tags: ['Industrial', 'Quadruped', 'Inspection'],
-    tags_zh: ['工业', '四足', '巡检'],
-    lastUpdated: '2026-01-12',
+    // 结构与要素：四足；用途：工业、巡检；特点：工业级
+    tags: ['Quadruped', 'Industrial', 'Inspection', 'Industrial-Grade'],
+    tags_zh: ['四足', '工业', '巡检', '工业级'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/b1_description'
   },
   {
@@ -169,9 +177,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 890,
     downloads: 2000,
-    tags: ['Industrial', 'Quadruped', 'Inspection'],
-    tags_zh: ['工业', '四足', '巡检'],
-    lastUpdated: '2026-01-13',
+    // 结构与要素：四足；用途：工业、巡检；特点：新一代、工业级
+    tags: ['Quadruped', 'Industrial', 'Inspection', 'Next-Gen', 'Industrial-Grade'],
+    tags_zh: ['四足', '工业', '巡检', '新一代', '工业级'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/b2_description'
   },
   {
@@ -186,9 +195,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 650,
     downloads: 1500,
-    tags: ['Research', 'Quadruped', 'General'],
-    tags_zh: ['科研', '四足', '通用'],
-    lastUpdated: '2026-01-10',
+    // 结构与要素：四足；用途：科研；特点：通用
+    tags: ['Quadruped', 'Research', 'General-Purpose'],
+    tags_zh: ['四足', '科研', '通用'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/aliengo_description'
   },
   {
@@ -203,28 +213,12 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 1050,
     downloads: 2300,
-    tags: ['Research', 'Quadruped', 'Agile'],
-    tags_zh: ['科研', '四足', '敏捷'],
-    lastUpdated: '2026-02-01',
+    // 结构与要素：四足；用途：科研；特点：新一代、敏捷
+    tags: ['Quadruped', 'Research', 'Next-Gen', 'Agile'],
+    tags_zh: ['四足', '科研', '新一代', '敏捷'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/a2_description'
   },
-//   {
-//     id: 'edfdd62f-7514-4c24-92db-eb3e4b53d9b9',
-//     name: 'Unitree Aliengo Z1',
-//     name_zh: 'Unitree Aliengo Z1',
-//     author: 'Unitree Robotics',
-//     author_zh: '宇树科技',
-//     description: 'Aliengo quadruped robot equipped with Z1 manipulator for mobile manipulation.',
-//     description_zh: '搭载Z1机械臂的Aliengo四足机器人，具备移动操作能力。',
-//     thumbnail: '/library/urdf/unitree/aliengoZ1_description/thumbnail.png',
-//     category: 'Full Robots', 
-//     stars: 800,
-//     downloads: 1600,
-//     tags: ['Research', 'Quadruped', 'Mobile Manipulation'],
-//     tags_zh: ['科研', '四足', '移动操作'],
-//     lastUpdated: '2026-01-20',
-//     urdfPath: '/library/urdf/unitree/aliengoZ1_description'
-//   },
   {
     id: 'fb1e6be5-b81b-4e31-9a79-ef03df20f099',
     name: 'Unitree B2W',
@@ -237,9 +231,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 920,
     downloads: 1900,
-    tags: ['Industrial', 'Wheeled-Legged', 'Inspection'],
-    tags_zh: ['工业', '轮足', '巡检'],
-    lastUpdated: '2026-01-22',
+    // 结构与要素：轮足、四足；用途：工业、巡检；特点：工业级
+    tags: ['Wheeled-Legged', 'Quadruped', 'Industrial', 'Inspection', 'Industrial-Grade'],
+    tags_zh: ['轮足', '四足', '工业', '巡检', '工业级'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/b2w_description'
   },
   {
@@ -254,9 +249,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 1150,
     downloads: 2800,
-    tags: ['Research', 'Wheeled-Legged', 'Mobile'],
-    tags_zh: ['科研', '轮足', '移动'],
-    lastUpdated: '2026-01-25',
+    // 结构与要素：轮足、四足；用途：科研；特点：高性能、高机动性
+    tags: ['Wheeled-Legged', 'Quadruped', 'Research', 'High-Performance', 'High-Mobility'],
+    tags_zh: ['轮足', '四足', '科研', '高性能', '高机动性'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/go2w_description'
   },
   {
@@ -271,9 +267,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 1950,
     downloads: 4100,
-    tags: ['Humanoid', 'Bipedal', 'Dexterous'],
-    tags_zh: ['人形', '双足', '灵巧操作'],
-    lastUpdated: '2026-02-05',
+    // 结构与要素：人形、双足、灵巧手；用途：教育、科研；特点：灵巧操作
+    tags: ['Humanoid', 'Bipedal', 'Dexterous Hand', 'Education', 'Research', 'Dexterous'],
+    tags_zh: ['人形', '双足', '灵巧手', '教育', '科研', '灵巧操作'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/g1_with_brainco_hand'
   },
   {
@@ -288,9 +285,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 500,
     downloads: 1200,
-    tags: ['Research', 'Quadruped', 'Classic'],
-    tags_zh: ['科研', '四足', '经典'],
-    lastUpdated: '2025-12-10',
+    // 结构与要素：四足；用途：科研；特点：经典
+    tags: ['Quadruped', 'Research', 'Classic'],
+    tags_zh: ['四足', '科研', '经典'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/laikago_description'
   },
   {
@@ -305,9 +303,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'End-effectors',
     stars: 700,
     downloads: 1400,
-    tags: ['Research', 'Manipulator', 'Hand'],
-    tags_zh: ['机械手', '灵巧操作', '科研'],
-    lastUpdated: '2026-01-18',
+    // 结构与要素：灵巧手、末端执行器；用途：科研；特点：灵巧操作
+    tags: ['Dexterous Hand', 'End-effector', 'Research', 'Dexterous'],
+    tags_zh: ['灵巧手', '末端执行器', '科研', '灵巧操作'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/dexterous_hand_description',
     urdfFile: 'Dex5-URDF-R.urdf'
   },
@@ -323,9 +322,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 850,
     downloads: 1700,
-    tags: ['Manipulator', 'Collaborative', 'Lightweight'],
-    tags_zh: ['机械臂', '协作', '轻量'],
-    lastUpdated: '2026-01-09',
+    // 结构与要素：机械臂；用途：科研、工业；特点：轻量、协作
+    tags: ['Manipulator', 'Research', 'Industrial', 'Lightweight', 'Collaborative'],
+    tags_zh: ['机械臂', '科研', '工业', '轻量', '协作'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/z1_description'
   },
   {
@@ -340,9 +340,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 600,
     downloads: 1100,
-    tags: ['Humanoid', 'Bipedal', 'Smart'],
-    tags_zh: ['人形', '双足', '智能'],
-    lastUpdated: '2026-02-10',
+    // 结构与要素：人形、双足；用途：科研、教育；特点：智能
+    tags: ['Humanoid', 'Bipedal', 'Research', 'Education', 'Smart'],
+    tags_zh: ['人形', '双足', '科研', '教育', '智能'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/r1_description'
   },
   {
@@ -357,9 +358,10 @@ export const URDF_STUDIO_MODELS: URDFStudioModel[] = [
     category: 'Full Robots',
     stars: 580,
     downloads: 1050,
-    tags: ['Humanoid', 'Bipedal', 'Lightweight', 'Smart'],
-    tags_zh: ['人形', '双足', '轻量', '智能'],
-    lastUpdated: '2026-02-12',
+    // 结构与要素：人形、双足；用途：科研、教育；特点：轻量、智能
+    tags: ['Humanoid', 'Bipedal', 'Research', 'Education', 'Lightweight', 'Smart'],
+    tags_zh: ['人形', '双足', '科研', '教育', '轻量', '智能'],
+    lastUpdated: '2026-03-04',
     urdfPath: '/library/urdf/unitree/r1_air_description'
   }
 ];

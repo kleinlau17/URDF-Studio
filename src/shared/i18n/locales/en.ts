@@ -15,6 +15,7 @@ export const en: TranslationKeys = {
   noModelsFound: "No models found",
   changeSearchKeywords: "Try changing your search keywords or category",
   categories: "Categories",
+  tags: "Tags",
   allModels: "All Models",
   // New Categories
   fullRobots: "Full Robots",

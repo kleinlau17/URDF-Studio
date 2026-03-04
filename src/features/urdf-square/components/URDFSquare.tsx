@@ -4,7 +4,7 @@ import {
   Star, Clock, Globe, Loader2,
   Minimize2, Maximize2, Minus
 } from 'lucide-react';
-import { RobotThumbnail3D } from './RobotThumbnail3D';
+import { RobotPreview } from './RobotPreview';
 import { translations } from '@/shared/i18n';
 
 interface URDFSquareProps {
@@ -27,7 +27,6 @@ interface RobotModel {
   urdfPath?: string;
   urdfFile?: string;
   previewVideo?: string;
-  sourceType: 'server' | 'url';
 }
 
 interface ModelTranslation {
@@ -55,28 +54,26 @@ const ROBOT_MODELS: RobotModel[] = [
     name: 'Unitree Go2',
     author: 'Unitree Robotics',
     description: 'High-performance quadruped robot for research and entertainment.',
-    thumbnail: '/library/urdf/unitree/go2_description/urdf/Normal_collision_model.png',
+    thumbnail: '/library/urdf/unitree/go2_description/thumbnail.png',
     category: 'Quadruped',
     stars: 1250,
     downloads: 3200,
     tags: ['Research', 'Quadruped', 'Mobile'],
     lastUpdated: '2026-01-17',
-    urdfPath: '/library/urdf/unitree/go2_description',
-    sourceType: 'server'
+    urdfPath: '/library/urdf/unitree/go2_description'
   },
   {
     id: 'go1',
     name: 'Unitree Go1',
     author: 'Unitree Robotics',
     description: 'Consumer-grade quadruped robot for education and beginner research.',
-    thumbnail: '',
+    thumbnail: '/library/urdf/unitree/go1_description/thumbnail.png',
     category: 'Quadruped',
     stars: 980,
     downloads: 2100,
     tags: ['Education', 'Quadruped', 'Beginner'],
     lastUpdated: '2026-01-15',
-    urdfPath: '/library/urdf/unitree/go1_description',
-    sourceType: 'server'
+    urdfPath: '/library/urdf/unitree/go1_description'
   },
   {
     id: 'g1',
@@ -90,8 +87,7 @@ const ROBOT_MODELS: RobotModel[] = [
     tags: ['Humanoid', 'Bipedal', 'Research'],
     lastUpdated: '2026-01-17',
     urdfPath: '/library/urdf/unitree/g1_description',
-    urdfFile: 'g1_29dof_with_hand.urdf',
-    sourceType: 'server'
+    urdfFile: 'g1_29dof_with_hand.urdf'
   },
   {
     id: 'h1',
@@ -104,8 +100,7 @@ const ROBOT_MODELS: RobotModel[] = [
     downloads: 3800,
     tags: ['Humanoid', 'High-Performance', 'Research'],
     lastUpdated: '2026-01-16',
-    urdfPath: '/library/urdf/unitree/h1_description',
-    sourceType: 'server'
+    urdfPath: '/library/urdf/unitree/h1_description'
   },
   {
     id: 'h1_2',
@@ -118,64 +113,59 @@ const ROBOT_MODELS: RobotModel[] = [
     downloads: 2800,
     tags: ['Humanoid', 'Bipedal', 'Next-Gen'],
     lastUpdated: '2026-01-18',
-    urdfPath: '/library/urdf/unitree/h1_2_description',
-    sourceType: 'server'
+    urdfPath: '/library/urdf/unitree/h1_2_description'
   },
   {
     id: 'a1',
     name: 'Unitree A1',
     author: 'Unitree Robotics',
     description: 'Agile quadruped robot for dynamic motion research.',
-    thumbnail: '/library/urdf/unitree/a1_description/meshes/trunk_A1.png',
+    thumbnail: '/library/urdf/unitree/a1_description/thumbnail.png',
     category: 'Quadruped',
     stars: 1100,
     downloads: 2500,
     tags: ['Research', 'Quadruped', 'Agile'],
     lastUpdated: '2026-01-14',
-    urdfPath: '/library/urdf/unitree/a1_description',
-    sourceType: 'server'
+    urdfPath: '/library/urdf/unitree/a1_description'
   },
   {
     id: 'b1',
     name: 'Unitree B1',
     author: 'Unitree Robotics',
     description: 'Industrial-grade quadruped robot for inspection tasks.',
-    thumbnail: '',
+    thumbnail: '/library/urdf/unitree/b1_description/thumbnail.png',
     category: 'Quadruped',
     stars: 750,
     downloads: 1800,
     tags: ['Industrial', 'Quadruped', 'Inspection'],
     lastUpdated: '2026-01-12',
-    urdfPath: '/library/urdf/unitree/b1_description',
-    sourceType: 'server'
+    urdfPath: '/library/urdf/unitree/b1_description'
   },
   {
     id: 'b2',
     name: 'Unitree B2',
     author: 'Unitree Robotics',
     description: 'Next-generation industrial quadruped robot.',
-    thumbnail: '/library/urdf/unitree/b2_description_mujoco/Screenshot from 2023-12-11 21-44-55.png',
+    thumbnail: '/library/urdf/unitree/b2_description/thumbnail.png',
     category: 'Quadruped',
     stars: 890,
     downloads: 2000,
     tags: ['Industrial', 'Quadruped', 'Inspection'],
     lastUpdated: '2026-01-13',
-    urdfPath: '/library/urdf/unitree/b2_description',
-    sourceType: 'server'
+    urdfPath: '/library/urdf/unitree/b2_description'
   },
   {
     id: 'aliengo',
     name: 'Unitree Aliengo',
     author: 'Unitree Robotics',
     description: 'Medium-sized quadruped robot for various applications.',
-    thumbnail: '/library/urdf/unitree/aliengo_description/meshes/trunk_uv_base_final.png',
+    thumbnail: '/library/urdf/unitree/aliengo_description/thumbnail.png',
     category: 'Quadruped',
     stars: 650,
     downloads: 1500,
     tags: ['Research', 'Quadruped', 'General'],
     lastUpdated: '2026-01-10',
-    urdfPath: '/library/urdf/unitree/aliengo_description',
-    sourceType: 'server'
+    urdfPath: '/library/urdf/unitree/aliengo_description'
   },
 ];
 
@@ -201,11 +191,13 @@ const getCategoryName = (categoryId: string, t: typeof translations['en']) => {
 
 const RobotThumbnail = ({ model, theme }: { model: RobotModel; theme?: 'light' | 'dark' }) => {
   // Use 3D preview for server-hosted models with urdfPath
-  if (model.sourceType === 'server' && model.urdfPath && !model.urdfPath.startsWith('http')) {
+  if (model.urdfPath && !model.urdfPath.startsWith('http')) {
     return (
-      <RobotThumbnail3D 
+      <RobotPreview
         urdfPath={model.urdfPath}
         urdfFile={model.urdfFile}
+        modelId={model.id}
+        thumbnail={model.thumbnail}
         theme={theme}
       />
     );
@@ -216,7 +208,7 @@ const RobotThumbnail = ({ model, theme }: { model: RobotModel; theme?: 'light' |
     <div className="flex flex-col items-center justify-center gap-2 text-slate-400 dark:text-slate-500 w-full h-full">
       <Box className="w-10 h-10 opacity-40" />
       <span className="text-[9px] uppercase tracking-widest font-medium opacity-60">
-        {model.sourceType === 'url' ? 'GitHub' : 'Preview'}
+        Preview
       </span>
     </div>
   );
@@ -629,7 +621,7 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
                   {filteredModels.map(model => (
                     <div key={model.id} className="group bg-white dark:bg-panel-bg rounded-lg border border-slate-200 dark:border-border-black hover:border-[#0060FA] dark:hover:border-[#0060FA] overflow-hidden transition-all shadow-md hover:shadow-2xl dark:shadow-black flex flex-col">
                       {/* Thumbnail Area */}
-                      <div className="relative h-36 overflow-hidden bg-slate-100 dark:bg-black flex items-center justify-center">
+                      <div className="relative w-full aspect-video overflow-hidden bg-slate-100 dark:bg-black flex items-center justify-center">
                         <RobotThumbnail model={model} theme={theme} />
                         
                         <div className="absolute top-2 left-2 flex gap-1">

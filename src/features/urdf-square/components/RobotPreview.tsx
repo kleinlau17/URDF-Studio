@@ -11,6 +11,8 @@ import { RobotThumbnail3D } from './RobotThumbnail3D';
 interface RobotPreviewProps {
   urdfPath: string;
   modelId: string;
+  thumbnail?: string;
+  urdfFile?: string;
   theme?: 'light' | 'dark';
 }
 
@@ -20,6 +22,8 @@ interface RobotPreviewProps {
 export const RobotPreview: React.FC<RobotPreviewProps> = ({ 
   urdfPath, 
   modelId,
+  thumbnail,
+  urdfFile,
   theme = 'dark' 
 }) => {
   const [previewType, setPreviewType] = useState<'loading' | 'animated' | '3d'>('loading');
@@ -53,26 +57,42 @@ export const RobotPreview: React.FC<RobotPreviewProps> = ({
     if (!isVisible) return;
 
     const checkForAnimation = async () => {
-      // Try to load pre-recorded WebP animation
-      const animPath = `${urdfPath}/preview.webp`;
-      
+      // If thumbnail is not provided, fallback to 3D immediately
+      if (!thumbnail) {
+        setPreviewType('3d');
+        return;
+      }
+
+      // Handle Cloud Storage via API
       try {
-        const response = await fetch(animPath, { method: 'HEAD' });
+        const token = (import.meta as any).env.VITE_API_TOKEN;
+        const response = await fetch('/api/get-signed-url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ filePath: thumbnail }),
+        });
+
         if (response.ok) {
-          setAnimationUrl(animPath);
-          setPreviewType('animated');
-          return;
+          const result = await response.json();
+          if (result.success && result.data?.url) {
+            setAnimationUrl(result.data.url);
+            setPreviewType('animated');
+            return;
+          }
         }
       } catch (e) {
-        // Animation not found, use 3D
+        console.error('[RobotPreview] Failed to check cloud animation:', e);
       }
       
-      // Fallback to 3D rendering
+      // 3. Fallback to 3D rendering
       setPreviewType('3d');
     };
 
     checkForAnimation();
-  }, [urdfPath, isVisible]);
+  }, [urdfPath, isVisible, thumbnail]);
 
   // Loading state
   if (!isVisible || previewType === 'loading') {
@@ -97,8 +117,12 @@ export const RobotPreview: React.FC<RobotPreviewProps> = ({
         <img 
           src={animationUrl}
           alt={`${modelId} preview`}
-          className="w-full h-full object-contain"
+          className="w-full h-full object-cover"
           loading="lazy"
+          onError={() => {
+            // If image fails to load, fallback to 3D view
+            setPreviewType('3d');
+          }}
         />
       </div>
     );
@@ -107,7 +131,11 @@ export const RobotPreview: React.FC<RobotPreviewProps> = ({
   // 3D fallback
   return (
     <div ref={containerRef} className="w-full h-full">
-      <RobotThumbnail3D urdfPath={urdfPath} theme={theme} />
+      <RobotThumbnail3D 
+        urdfPath={urdfPath}
+        urdfFile={urdfFile}
+        theme={theme}
+      />
     </div>
   );
 };

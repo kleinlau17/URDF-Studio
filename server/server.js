@@ -53,8 +53,8 @@ const client = new BosClient(bosConfig);
 // Enable CORS for frontend
 app.use(cors());
 
-// Parse JSON bodies
-app.use(bodyParser.json());
+// Parse JSON bodies (limit increased for base64 image uploads)
+app.use(bodyParser.json({ limit: '10mb' }));
 
 // Auth Middleware
 const authenticateToken = (req, res, next) => {
@@ -122,9 +122,9 @@ app.post('/api/download-model', authenticateToken, async (req, res) => {
         .filter(item => item !== null);
 
       console.log(`[Backend] Found ${files.length} files`);
-      console.log('[Backend] Generated files list:', JSON.stringify(files, null, 2));
+      // console.log('[Backend] Generated files list:', JSON.stringify(files, null, 2));
 
-      res.json({ 
+      res.json({  
           success: true, 
           message: 'Files listed successfully',
           data: {
@@ -134,6 +134,73 @@ app.post('/api/download-model', authenticateToken, async (req, res) => {
   } catch (error) {
       console.error('[Backend] Error generating download URL:', error);
       res.status(500).json({ success: false, message: 'Failed to generate download URL' });
+  }
+});
+
+// Endpoint to get a signed URL for a single file
+app.post('/api/get-signed-url', authenticateToken, async (req, res) => {
+  const { filePath } = req.body;
+
+  if (!filePath) {
+     return res.status(400).json({ success: false, message: 'filePath is required' });
+  }
+
+  try {
+      const bucketName = process.env.BOS_BUCKET;
+      // Normalize filePath to remove leading slash
+      const key = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+
+      console.log(`[Backend] Generating signed URL for single file: ${key}`);
+
+      // Use 1800s (30min) expiration
+      const downloadUrl = client.generatePresignedUrl(bucketName, key, {
+          expirationInSeconds: 1800
+      });
+
+      res.json({ 
+          success: true, 
+          message: 'URL generated successfully',
+          data: {
+              url: downloadUrl
+          }
+      });
+  } catch (error) {
+      console.error('[Backend] Error generating signed URL:', error);
+      res.status(500).json({ success: false, message: 'Failed to generate signed URL' });
+  }
+});
+
+// Endpoint to upload a file (Server-side proxy to avoid CORS problems)
+app.post('/api/upload-file', authenticateToken, async (req, res) => {
+  const { filePath, content } = req.body;
+
+  if (!filePath || !content) {
+     return res.status(400).json({ success: false, message: 'filePath and content are required' });
+  }
+
+  try {
+      const bucketName = process.env.BOS_BUCKET;
+      // Normalize filePath to remove leading slash
+      const key = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+
+      console.log(`[Backend] Uploading file to BOS: ${key}`);
+
+      // Extract raw base64 data
+      const base64Data = content.replace(/^data:image\/\w+;base64,/, '');
+      const buffer = Buffer.from(base64Data, 'base64');
+      
+      // Upload to BOS
+      await client.putObject(bucketName, key, buffer, {
+          'Content-Type': 'image/png'
+      });
+
+      res.json({ 
+          success: true, 
+          message: 'File uploaded successfully'
+      });
+  } catch (error) {
+      console.error('[Backend] Error uploading file:', error);
+      res.status(500).json({ success: false, message: 'Failed to upload file' });
   }
 });
 

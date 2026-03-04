@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { RobotPreview } from './RobotPreview';
 import { translations } from '@/shared/i18n';
+import { URDF_STUDIO_MODELS, URDFStudioModel } from '../data';
 
 interface URDFSquareProps {
   onClose: () => void;
@@ -13,161 +14,7 @@ interface URDFSquareProps {
   onImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-interface RobotModel {
-  id: string;
-  name: string;
-  author: string;
-  description: string;
-  thumbnail: string;
-  category: string;
-  stars: number;
-  downloads: number;
-  tags: string[];
-  lastUpdated: string;
-  urdfPath?: string;
-  urdfFile?: string;
-  previewVideo?: string;
-}
 
-interface ModelTranslation {
-  name_zh: string;
-  description_zh: string;
-  tags_zh: string[];
-}
-
-const MODEL_TRANSLATIONS: Record<string, ModelTranslation> = {
-  'go2': { name_zh: 'Unitree Go2 四足机器人', description_zh: '高性能四足机器人，适用于科研和娱乐场景。', tags_zh: ['科研', '四足', '移动'] },
-  'go1': { name_zh: 'Unitree Go1 四足机器人', description_zh: '消费级四足机器人，适合教育和入门研究。', tags_zh: ['教育', '四足', '入门'] },
-  'g1': { name_zh: 'Unitree G1 人形机器人', description_zh: '通用人形机器人，适用于教育和科研。', tags_zh: ['人形', '双足', '科研'] },
-  'h1': { name_zh: 'Unitree H1 人形机器人', description_zh: '高性能人形机器人，适用于高级研究。', tags_zh: ['人形', '高性能', '科研'] },
-  'h1_2': { name_zh: 'Unitree H1 2.0 人形机器人', description_zh: '第二代高性能人形机器人。', tags_zh: ['人形', '双足', '新一代'] },
-  'a1': { name_zh: 'Unitree A1 四足机器人', description_zh: '敏捷四足机器人，适合动态运动研究。', tags_zh: ['科研', '四足', '敏捷'] },
-  'b1': { name_zh: 'Unitree B1 四足机器人', description_zh: '工业级四足机器人，适用于巡检任务。', tags_zh: ['工业', '四足', '巡检'] },
-  'b2': { name_zh: 'Unitree B2 四足机器人', description_zh: '新一代工业四足机器人。', tags_zh: ['工业', '四足', '巡检'] },
-  'aliengo': { name_zh: 'Unitree Aliengo 四足机器人', description_zh: '中型四足机器人，适用于多种场景。', tags_zh: ['科研', '四足', '通用'] },
-  'z1': { name_zh: 'Unitree Z1 机械臂', description_zh: '轻量级协作机械臂。', tags_zh: ['机械臂', '协作', '轻量'] },
-};
-
-const ROBOT_MODELS: RobotModel[] = [
-  {
-    id: 'go2',
-    name: 'Unitree Go2',
-    author: 'Unitree Robotics',
-    description: 'High-performance quadruped robot for research and entertainment.',
-    thumbnail: '/library/urdf/unitree/go2_description/thumbnail.png',
-    category: 'Quadruped',
-    stars: 1250,
-    downloads: 3200,
-    tags: ['Research', 'Quadruped', 'Mobile'],
-    lastUpdated: '2026-01-17',
-    urdfPath: '/library/urdf/unitree/go2_description'
-  },
-  {
-    id: 'go1',
-    name: 'Unitree Go1',
-    author: 'Unitree Robotics',
-    description: 'Consumer-grade quadruped robot for education and beginner research.',
-    thumbnail: '/library/urdf/unitree/go1_description/thumbnail.png',
-    category: 'Quadruped',
-    stars: 980,
-    downloads: 2100,
-    tags: ['Education', 'Quadruped', 'Beginner'],
-    lastUpdated: '2026-01-15',
-    urdfPath: '/library/urdf/unitree/go1_description'
-  },
-  {
-    id: 'g1',
-    name: 'Unitree G1',
-    author: 'Unitree Robotics',
-    description: 'General-purpose humanoid robot for education and research.',
-    thumbnail: '/library/urdf/unitree/g1_description/thumbnail.png',
-    category: 'Humanoid',
-    stars: 2100,
-    downloads: 4500,
-    tags: ['Humanoid', 'Bipedal', 'Research'],
-    lastUpdated: '2026-01-17',
-    urdfPath: '/library/urdf/unitree/g1_description',
-    urdfFile: 'g1_29dof_with_hand.urdf'
-  },
-  {
-    id: 'h1',
-    name: 'Unitree H1',
-    author: 'Unitree Robotics',
-    description: 'High-performance humanoid robot for advanced research.',
-    thumbnail: '/library/urdf/unitree/h1_description/thumbnail.png',
-    category: 'Humanoid',
-    stars: 1800,
-    downloads: 3800,
-    tags: ['Humanoid', 'High-Performance', 'Research'],
-    lastUpdated: '2026-01-16',
-    urdfPath: '/library/urdf/unitree/h1_description'
-  },
-  {
-    id: 'h1_2',
-    name: 'Unitree H1 2.0',
-    author: 'Unitree Robotics',
-    description: 'Second generation high-performance humanoid robot.',
-    thumbnail: '/library/urdf/unitree/h1_2_description/thumbnail.png',
-    category: 'Humanoid',
-    stars: 1500,
-    downloads: 2800,
-    tags: ['Humanoid', 'Bipedal', 'Next-Gen'],
-    lastUpdated: '2026-01-18',
-    urdfPath: '/library/urdf/unitree/h1_2_description'
-  },
-  {
-    id: 'a1',
-    name: 'Unitree A1',
-    author: 'Unitree Robotics',
-    description: 'Agile quadruped robot for dynamic motion research.',
-    thumbnail: '/library/urdf/unitree/a1_description/thumbnail.png',
-    category: 'Quadruped',
-    stars: 1100,
-    downloads: 2500,
-    tags: ['Research', 'Quadruped', 'Agile'],
-    lastUpdated: '2026-01-14',
-    urdfPath: '/library/urdf/unitree/a1_description'
-  },
-  {
-    id: 'b1',
-    name: 'Unitree B1',
-    author: 'Unitree Robotics',
-    description: 'Industrial-grade quadruped robot for inspection tasks.',
-    thumbnail: '/library/urdf/unitree/b1_description/thumbnail.png',
-    category: 'Quadruped',
-    stars: 750,
-    downloads: 1800,
-    tags: ['Industrial', 'Quadruped', 'Inspection'],
-    lastUpdated: '2026-01-12',
-    urdfPath: '/library/urdf/unitree/b1_description'
-  },
-  {
-    id: 'b2',
-    name: 'Unitree B2',
-    author: 'Unitree Robotics',
-    description: 'Next-generation industrial quadruped robot.',
-    thumbnail: '/library/urdf/unitree/b2_description/thumbnail.png',
-    category: 'Quadruped',
-    stars: 890,
-    downloads: 2000,
-    tags: ['Industrial', 'Quadruped', 'Inspection'],
-    lastUpdated: '2026-01-13',
-    urdfPath: '/library/urdf/unitree/b2_description'
-  },
-  {
-    id: 'aliengo',
-    name: 'Unitree Aliengo',
-    author: 'Unitree Robotics',
-    description: 'Medium-sized quadruped robot for various applications.',
-    thumbnail: '/library/urdf/unitree/aliengo_description/thumbnail.png',
-    category: 'Quadruped',
-    stars: 650,
-    downloads: 1500,
-    tags: ['Research', 'Quadruped', 'General'],
-    lastUpdated: '2026-01-10',
-    urdfPath: '/library/urdf/unitree/aliengo_description'
-  },
-];
 
 const CATEGORIES = [
   { id: 'all', icon: Box },
@@ -189,7 +36,7 @@ const getCategoryName = (categoryId: string, t: typeof translations['en']) => {
   }
 };
 
-const RobotThumbnail = ({ model, theme }: { model: RobotModel; theme?: 'light' | 'dark' }) => {
+const RobotThumbnail = ({ model, theme }: { model: URDFStudioModel; theme?: 'light' | 'dark' }) => {
   // Use 3D preview for server-hosted models with urdfPath
   if (model.urdfPath && !model.urdfPath.startsWith('http')) {
     return (
@@ -346,7 +193,7 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
 
 
 
-  const handleImportModel = async (model: RobotModel) => {
+  const handleImportModel = async (model: URDFStudioModel) => {
     if (!model.urdfPath) return;
     
     setIsDownloading(true);
@@ -424,7 +271,7 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
   };
 
   const filteredModels = useMemo(() => {
-    return ROBOT_MODELS.filter(model => {
+    return URDF_STUDIO_MODELS.filter(model => {
       const matchesSearch = model.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                             model.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                             model.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -645,7 +492,7 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
                       <div className="p-3 flex-1 flex flex-col">
                         <div className="flex justify-between items-start mb-1">
                           <h3 className="font-bold text-sm leading-tight group-hover:text-[#0060FA] transition-colors">
-                            {lang === 'zh' && MODEL_TRANSLATIONS[model.id]?.name_zh ? MODEL_TRANSLATIONS[model.id].name_zh : model.name}
+                            {lang === 'zh' && model.name_zh ? model.name_zh : model.name}
                           </h3>
                           <button className="text-slate-400 hover:text-red-500 transition-colors">
                             <Heart className="w-4 h-4" />
@@ -654,15 +501,15 @@ export const URDFSquare: React.FC<URDFSquareProps> = ({ onClose, lang, onImport 
                         
                         <div className="flex items-center gap-1 text-[10px] text-slate-500 dark:text-slate-400 mb-2">
                           <User className="w-3 h-3" />
-                          <span>{t.unitreeTech}</span>
+                          <span>{lang === 'zh' && model.author_zh ? model.author_zh : model.author}</span>
                         </div>
 
                         <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 mb-2 flex-1">
-                          {lang === 'zh' && MODEL_TRANSLATIONS[model.id]?.description_zh ? MODEL_TRANSLATIONS[model.id].description_zh : model.description}
+                          {lang === 'zh' && model.description_zh ? model.description_zh : model.description}
                         </p>
 
                         <div className="flex flex-wrap gap-1 mb-2">
-                          {(lang === 'zh' && MODEL_TRANSLATIONS[model.id]?.tags_zh ? MODEL_TRANSLATIONS[model.id].tags_zh : model.tags).slice(0, 3).map((tag, idx) => (
+                          {(lang === 'zh' && model.tags_zh ? model.tags_zh : model.tags).slice(0, 3).map((tag, idx) => (
                             <span key={idx} className="px-1.5 py-0.5 bg-slate-100 dark:bg-app-bg text-slate-600 dark:text-slate-300 text-[9px] rounded-full">
                               #{tag}
                             </span>

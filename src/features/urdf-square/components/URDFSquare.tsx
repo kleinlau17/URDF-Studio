@@ -18,20 +18,22 @@ interface URDFSquareProps {
 
 const CATEGORIES = [
   { id: 'all', icon: Box },
-  { id: 'Quadruped', icon: Box },
-  { id: 'Manipulator', icon: Box },
-  { id: 'Humanoid', icon: User },
-  { id: 'Mobile', icon: Globe },
+  { id: 'Full Robots', icon: User },
+  { id: 'End-effectors', icon: Box },
+  { id: 'Sensors', icon: Box },
+  { id: 'Articulated Objects', icon: Globe },
+  { id: 'Data Assets', icon: Box },
 ];
 
 // Get translated category name
 const getCategoryName = (categoryId: string, t: typeof translations['en']) => {
   switch (categoryId) {
     case 'all': return t.allModels;
-    case 'Quadruped': return t.quadruped;
-    case 'Manipulator': return t.manipulators;
-    case 'Humanoid': return t.humanoids;
-    case 'Mobile': return t.mobileBases;
+    case 'Full Robots': return t.fullRobots;
+    case 'End-effectors': return t.endEffectors;
+    case 'Sensors': return t.sensors;
+    case 'Articulated Objects': return t.articulatedObjects;
+    case 'Data Assets': return t.dataAssets;
     default: return categoryId;
   }
 };

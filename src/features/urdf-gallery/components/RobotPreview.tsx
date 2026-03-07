@@ -8,6 +8,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Box, Loader2 } from 'lucide-react';
 import { RobotThumbnail3D } from './RobotThumbnail3D';
 
+// Cache for signed URLs to avoid repeated requests during filtering
+// Key: thumbnail path, Value: { url: string, expiry: timestamp }
+const urlCache = new Map<string, { url: string; expiry: number }>();
+const CACHE_DURATION = 1000 * 60 * 30; // 30 minutes cache
+
 interface RobotPreviewProps {
   urdfPath: string;
   modelId: string;
@@ -66,7 +71,15 @@ export const RobotPreview: React.FC<RobotPreviewProps> = ({
         return;
       }
 
-      // Handle Cloud Storage via API
+      // 1. Check Cache first
+      const cached = urlCache.get(thumbnail);
+      if (cached && Date.now() < cached.expiry) {
+        setAnimationUrl(cached.url);
+        setPreviewType('animated');
+        return;
+      }
+
+      // 2. Handle Cloud Storage via API
       try {
         const token = (import.meta as any).env.VITE_API_TOKEN;
         const response = await fetch('/api/get-signed-url', {
@@ -81,6 +94,12 @@ export const RobotPreview: React.FC<RobotPreviewProps> = ({
         if (response.ok) {
           const result = await response.json();
           if (result.success && result.data?.url) {
+            // Save to cache
+            urlCache.set(thumbnail, {
+              url: result.data.url,
+              expiry: Date.now() + CACHE_DURATION
+            });
+
             setAnimationUrl(result.data.url);
             setIsImageLoaded(false);
             setPreviewType('animated');

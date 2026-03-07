@@ -7,7 +7,7 @@ import { RobotPreview } from './RobotPreview';
 import { DraggableWindow } from '@/shared/components';
 import { translations } from '@/shared/i18n';
 import { URDF_STUDIO_MODELS, URDFStudioModel } from '../data';
-import { useDraggableWindow } from '@/shared/hooks';
+import { useDraggableWindow, useEffectiveTheme } from '@/shared/hooks';
 
 interface URDFGalleryProps {
   onClose: () => void;
@@ -111,41 +111,11 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
   });
   const {
     isMinimized,
-    isMaximized,
     size,
     isResizing,
-    toggleMaximize,
-    toggleMinimize,
   } = windowState;
-  // Detect theme from document class
-  const [theme, setTheme] = useState<'light' | 'dark'>(
-    document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-  );
 
-  useEffect(() => {
-    const updateTheme = () => {
-      setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
-    };
-
-    // Initial check
-    updateTheme();
-
-    // Listen for class changes on html element
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
-          updateTheme();
-        }
-      });
-    });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-
-    return () => observer.disconnect();
-  }, []);
+  const theme = useEffectiveTheme();
 
 
 
@@ -155,7 +125,7 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
     setIsDownloading(true);
     try {
       // Request backend to download model (e.g. from Baidu Cloud)
-      const token = (import.meta as any).env.VITE_API_TOKEN;
+      const token = import.meta.env.VITE_API_TOKEN;
       const response = await fetch('/api/download-model', {
         method: 'POST',
         headers: {

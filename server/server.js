@@ -150,7 +150,7 @@ app.post('/api/get-signed-url', authenticateToken, async (req, res) => {
       // Normalize filePath to remove leading slash
       const key = filePath.startsWith('/') ? filePath.slice(1) : filePath;
 
-      console.log(`[Backend] Generating signed URL for single file: ${key}`);
+    //   console.log(`[Backend] Generating signed URL for single file: ${key}`);
 
       // Use 1800s (30min) expiration
       const downloadUrl = client.generatePresignedUrl(bucketName, key, {
@@ -172,10 +172,18 @@ app.post('/api/get-signed-url', authenticateToken, async (req, res) => {
 
 // Endpoint to upload a file (Server-side proxy to avoid CORS problems)
 app.post('/api/upload-file', authenticateToken, async (req, res) => {
-  const { filePath, content } = req.body;
+  const { filePath, content, secret } = req.body;
 
   if (!filePath || !content) {
      return res.status(400).json({ success: false, message: 'filePath and content are required' });
+  }
+
+  // Security: Require Upload Secret
+  // This ensures that only users (or environments) that possess the SECRET can upload,
+  // preventing public users (who only have the Token) from overwriting files.
+  if (secret !== process.env.UPLOAD_SECRET) {
+      console.warn(`[Backend Security] Upload attempt with invalid secret`);
+      return res.status(403).json({ success: false, message: 'Invalid upload secret' });
   }
 
   try {

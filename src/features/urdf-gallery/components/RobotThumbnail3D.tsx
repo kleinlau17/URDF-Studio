@@ -286,6 +286,8 @@ export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ urdfPath, ur
           : `${urdfPath}/${THUMBNAIL_FILENAME}`;
       
       // Upload directly to backend
+      const secret = import.meta.env.VITE_UPLOAD_SECRET;
+      
       const res = await fetch('/api/upload-file', {
         method: 'POST',
         headers: {
@@ -294,7 +296,8 @@ export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ urdfPath, ur
         },
         body: JSON.stringify({ 
            filePath: targetPath,
-           content: dataUrl 
+           content: dataUrl,
+           secret: secret || '' // Optional extra secret for admin-only upload
         })
       });
 

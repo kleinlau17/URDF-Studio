@@ -9,6 +9,8 @@ export enum JointType {
   REVOLUTE = 'revolute',
   CONTINUOUS = 'continuous',
   PRISMATIC = 'prismatic',
+  PLANAR = 'planar',
+  FLOATING = 'floating',
 }
 
 export interface UrdfInertial {
@@ -29,6 +31,11 @@ export interface UrdfLink {
   name: string;
   visual: UrdfVisual;
   collision: UrdfVisual;
+  /**
+   * Additional collision geometries on the same link.
+   * The primary collision is kept in `collision` for backward compatibility.
+   */
+  collisionBodies?: UrdfVisual[];
   inertial: UrdfInertial;
   visible?: boolean; // Controls visibility in the 3D scene
 }
@@ -64,11 +71,47 @@ export interface RobotState {
   links: Record<string, UrdfLink>;
   joints: Record<string, UrdfJoint>;
   rootLinkId: string;
-  selection: { type: 'link' | 'joint' | null; id: string | null; subType?: 'visual' | 'collision' };
+  selection: { type: 'link' | 'joint' | null; id: string | null; subType?: 'visual' | 'collision'; objectIndex?: number };
+}
+
+/** Robot data without selection (selection is in selectionStore) */
+export interface RobotData {
+  name: string;
+  links: Record<string, UrdfLink>;
+  joints: Record<string, UrdfJoint>;
+  rootLinkId: string;
+  materials?: Record<string, { color?: string; texture?: string }>;
+}
+
+/** Assembly component: a URDF parsed into RobotData with namespace */
+export interface AssemblyComponent {
+  id: string;
+  name: string;
+  sourceFile: string;
+  robot: RobotData;
+  visible?: boolean;
+}
+
+/** Bridge joint: connects two components */
+export interface BridgeJoint {
+  id: string;
+  name: string;
+  parentComponentId: string;
+  parentLinkId: string;
+  childComponentId: string;
+  childLinkId: string;
+  joint: UrdfJoint;
+}
+
+/** Assembly state for multi-URDF composition */
+export interface AssemblyState {
+  name: string;
+  components: Record<string, AssemblyComponent>;
+  bridges: Record<string, BridgeJoint>;
 }
 
 export interface RobotFile {
   name: string;
   content: string;
-  format: 'urdf' | 'mjcf' | 'usd' | 'xacro';
+  format: 'urdf' | 'mjcf' | 'usd' | 'xacro' | 'mesh';
 }

@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { throttle } from '@/shared/utils';
 import { MOUSE_MOVE_THRESHOLD, THROTTLE_INTERVAL } from '../constants';
 import type { ToolMode } from '../types';
+import { isSingleDofJoint } from '../utils/jointTypes';
 
 export interface UseMouseInteractionOptions {
     robot: THREE.Object3D | null;
@@ -13,17 +14,19 @@ export interface UseMouseInteractionOptions {
     showCollision: boolean;
     showVisual: boolean;
     onSelect?: (type: 'link' | 'joint', id: string, subType?: 'visual' | 'collision') => void;
+    onMeshSelect?: (linkId: string, jointId: string | null, objectIndex: number, objectType: 'visual' | 'collision') => void;
     onJointChange?: (name: string, angle: number) => void;
     onJointChangeCommit?: (name: string, angle: number) => void;
     setIsDragging?: (dragging: boolean) => void;
     setActiveJoint?: (jointName: string | null) => void;
     justSelectedRef?: React.MutableRefObject<boolean>;
     isOrbitDragging?: React.MutableRefObject<boolean>;
+    isSelectionLockedRef?: React.MutableRefObject<boolean>;
     highlightGeometry: (
         linkName: string | null,
         revert: boolean,
         subType?: 'visual' | 'collision',
-        meshToHighlight?: THREE.Object3D | null
+        meshToHighlight?: THREE.Object3D | null | number
     ) => void;
 }
 
@@ -44,15 +47,17 @@ export function useMouseInteraction({
     showCollision,
     showVisual,
     onSelect,
+    onMeshSelect,
     onJointChange,
     onJointChangeCommit,
     setIsDragging,
     setActiveJoint,
     justSelectedRef,
     isOrbitDragging,
+    isSelectionLockedRef,
     highlightGeometry
 }: UseMouseInteractionOptions): UseMouseInteractionResult {
-    const { camera, gl, invalidate } = useThree();
+    const { camera, gl, scene, invalidate } = useThree();
 
     const mouseRef = useRef(new THREE.Vector2(-1000, -1000));
     const raycasterRef = useRef(new THREE.Raycaster());
@@ -67,6 +72,7 @@ export function useMouseInteraction({
     const dragJoint = useRef<any>(null);
     const dragHitDistance = useRef(0);
     const lastRayRef = useRef(new THREE.Ray());
+    const selectionResetTimerRef = useRef<number | null>(null);
 
     // Keep refs up to date
     const onJointChangeRef = useRef(onJointChange);
@@ -85,6 +91,17 @@ export function useMouseInteraction({
 
     // Mouse tracking for hover detection AND joint dragging
     useEffect(() => {
+        const tempWorldQuat = new THREE.Quaternion();
+        const tempAxisWorld = new THREE.Vector3();
+        const tempPivotPoint = new THREE.Vector3();
+        const tempPlane = new THREE.Plane();
+        const tempProjStart = new THREE.Vector3();
+        const tempProjEnd = new THREE.Vector3();
+        const tempCross = new THREE.Vector3();
+        const tempDelta = new THREE.Vector3();
+        const tempPrevHitPoint = new THREE.Vector3();
+        const tempNewHitPoint = new THREE.Vector3();
+
         /**
          * Find the parent link of the clicked object
          */
@@ -104,6 +121,15 @@ export function useMouseInteraction({
             return null;
         };
 
+        const isGizmoObject = (object: THREE.Object3D | null): boolean => {
+            let current: THREE.Object3D | null = object;
+            while (current) {
+                if (current.userData?.isGizmo) return true;
+                current = current.parent;
+            }
+            return false;
+        };
+
         /**
          * Find the parent joint of a link (for drag rotation)
          */
@@ -114,10 +140,8 @@ export function useMouseInteraction({
 
             while (current && current !== robot) {
                 if ((current as any).isURDFJoint || (current as any).type === 'URDFJoint') {
-                    const jointType = (current as any).jointType;
-
-                    // Skip fixed joints
-                    if (jointType === 'fixed') {
+                    // Skip non-interactive joints (fixed, floating, planar, etc.)
+                    if (!isSingleDofJoint(current)) {
                         let parentLink: THREE.Object3D | null = current.parent;
                         while (parentLink && parentLink !== robot) {
                             if ((parentLink as any).isURDFLink || (parentLink as any).type === 'URDFLink') {
@@ -140,69 +164,62 @@ export function useMouseInteraction({
         const getRevoluteDelta = (joint: any, startPt: THREE.Vector3, endPt: THREE.Vector3): number => {
             const axis = joint.axis || new THREE.Vector3(0, 0, 1);
 
-            const worldQuat = new THREE.Quaternion();
             if (joint.bodyOffsetGroup) {
-                joint.bodyOffsetGroup.getWorldQuaternion(worldQuat);
+                joint.bodyOffsetGroup.getWorldQuaternion(tempWorldQuat);
             } else if (joint.parent) {
-                joint.parent.getWorldQuaternion(worldQuat);
+                joint.parent.getWorldQuaternion(tempWorldQuat);
             } else {
-                joint.getWorldQuaternion(worldQuat);
+                joint.getWorldQuaternion(tempWorldQuat);
             }
 
-            const axisWorld = axis.clone().applyQuaternion(worldQuat).normalize();
-            const pivotPoint = new THREE.Vector3().setFromMatrixPosition(joint.matrixWorld);
-            const plane = new THREE.Plane().setFromNormalAndCoplanarPoint(axisWorld, pivotPoint);
+            tempAxisWorld.copy(axis).applyQuaternion(tempWorldQuat).normalize();
+            tempPivotPoint.setFromMatrixPosition(joint.matrixWorld);
+            tempPlane.setFromNormalAndCoplanarPoint(tempAxisWorld, tempPivotPoint);
 
-            const projStart = new THREE.Vector3();
-            const projEnd = new THREE.Vector3();
-            plane.projectPoint(startPt, projStart);
-            plane.projectPoint(endPt, projEnd);
+            tempPlane.projectPoint(startPt, tempProjStart);
+            tempPlane.projectPoint(endPt, tempProjEnd);
 
-            projStart.sub(pivotPoint);
-            projEnd.sub(pivotPoint);
+            tempProjStart.sub(tempPivotPoint);
+            tempProjEnd.sub(tempPivotPoint);
 
-            const cross = new THREE.Vector3().crossVectors(projStart, projEnd);
-            const direction = Math.sign(cross.dot(axisWorld));
-            return direction * projStart.angleTo(projEnd);
+            tempCross.crossVectors(tempProjStart, tempProjEnd);
+            const direction = Math.sign(tempCross.dot(tempAxisWorld));
+            return direction * tempProjStart.angleTo(tempProjEnd);
         };
 
         const getPrismaticDelta = (joint: any, startPt: THREE.Vector3, endPt: THREE.Vector3): number => {
             const axis = joint.axis || new THREE.Vector3(0, 0, 1);
 
-            const worldQuat = new THREE.Quaternion();
             if (joint.bodyOffsetGroup) {
-                joint.bodyOffsetGroup.getWorldQuaternion(worldQuat);
+                joint.bodyOffsetGroup.getWorldQuaternion(tempWorldQuat);
             } else if (joint.parent) {
-                joint.parent.getWorldQuaternion(worldQuat);
+                joint.parent.getWorldQuaternion(tempWorldQuat);
             } else {
-                joint.getWorldQuaternion(worldQuat);
+                joint.getWorldQuaternion(tempWorldQuat);
             }
 
-            const axisWorld = axis.clone().applyQuaternion(worldQuat).normalize();
-            const delta = new THREE.Vector3().subVectors(endPt, startPt);
-            return delta.dot(axisWorld);
+            tempAxisWorld.copy(axis).applyQuaternion(tempWorldQuat).normalize();
+            tempDelta.subVectors(endPt, startPt);
+            return tempDelta.dot(tempAxisWorld);
         };
 
         const moveRay = (toRay: THREE.Ray) => {
             if (!isDraggingJoint.current || !dragJoint.current) return;
 
-            const prevHitPoint = new THREE.Vector3();
-            const newHitPoint = new THREE.Vector3();
-
-            lastRayRef.current.at(dragHitDistance.current, prevHitPoint);
-            toRay.at(dragHitDistance.current, newHitPoint);
+            lastRayRef.current.at(dragHitDistance.current, tempPrevHitPoint);
+            toRay.at(dragHitDistance.current, tempNewHitPoint);
 
             let delta = 0;
             const jt = dragJoint.current.jointType;
 
             if (jt === 'revolute' || jt === 'continuous') {
-                delta = getRevoluteDelta(dragJoint.current, prevHitPoint, newHitPoint);
+                delta = getRevoluteDelta(dragJoint.current, tempPrevHitPoint, tempNewHitPoint);
             } else if (jt === 'prismatic') {
-                delta = getPrismaticDelta(dragJoint.current, prevHitPoint, newHitPoint);
+                delta = getPrismaticDelta(dragJoint.current, tempPrevHitPoint, tempNewHitPoint);
             }
 
             if (delta !== 0) {
-                const currentAngle = dragJoint.current.angle || 0;
+                const currentAngle = dragJoint.current.angle ?? dragJoint.current.jointValue ?? 0;
                 let newAngle = currentAngle + delta;
 
                 const limit = dragJoint.current.limit || { lower: -Math.PI, upper: Math.PI };
@@ -273,6 +290,7 @@ export function useMouseInteraction({
 
         const handleMouseDown = (e: MouseEvent) => {
             if (!robot) return;
+            if (isSelectionLockedRef?.current) return;
 
             const isStandardSelectionMode = ['select', 'translate', 'rotate', 'universal'].includes(toolMode || 'select');
 
@@ -285,12 +303,19 @@ export function useMouseInteraction({
             }
 
             const rect = gl.domElement.getBoundingClientRect();
-            const mouse = new THREE.Vector2(
-                ((e.clientX - rect.left) / rect.width) * 2 - 1,
-                -((e.clientY - rect.top) / rect.height) * 2 + 1
-            );
+            mouseRef.current.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouseRef.current.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            raycasterRef.current.setFromCamera(mouseRef.current, camera);
 
-            raycasterRef.current.setFromCamera(mouse, camera);
+            // IMPORTANT:
+            // TransformControls gizmo is not a child of `robot`.
+            // If we only raycast `robot`, clicking gizmo will "pass through" and select
+            // underlying collision/visual meshes by mistake.
+            const sceneHits = raycasterRef.current.intersectObjects(scene.children, true);
+            const nearestSceneHit = sceneHits[0];
+            if (nearestSceneHit && isGizmoObject(nearestSceneHit.object)) {
+                return;
+            }
 
             const intersections = raycasterRef.current.intersectObject(robot, true);
 
@@ -334,22 +359,50 @@ export function useMouseInteraction({
 
                 const linkObj = findParentLink(hit.object);
 
-                if (linkObj && onSelect) {
+                if (linkObj && (onSelect || onMeshSelect)) {
                     const subType = isCollisionMode ? 'collision' : 'visual';
 
-                    if (mode === 'detail') {
-                        onSelect('link', linkObj.name, subType);
-                    } else {
-                        const parent = linkObj.parent;
-                        if (parent && (parent as any).isURDFJoint) {
-                            onSelect('joint', parent.name);
-                        } else {
+                    // Compute objectIndex outside onMeshSelect block so it's available for highlightGeometry
+                    let objectIndex = 0;
+                    let current: THREE.Object3D | null = hit.object;
+                    let urdfElement: THREE.Object3D | null = null;
+                    while (current && current !== linkObj) {
+                        if ((current as any).isURDFVisual || (current as any).isURDFCollider) {
+                            urdfElement = current;
+                            break;
+                        }
+                        current = current.parent;
+                    }
+                    if (urdfElement) {
+                        const isCollider = (urdfElement as any).isURDFCollider;
+                        const siblings = linkObj.children.filter((c: any) => isCollider ? (c as any).isURDFCollider : (c as any).isURDFVisual);
+                        objectIndex = Math.max(0, siblings.indexOf(urdfElement));
+                    }
+
+                    // Call onSelect FIRST so onMeshSelect (called after) wins in React state batching
+                    if (onSelect) {
+                        if (mode === 'detail') {
                             onSelect('link', linkObj.name, subType);
+                        } else {
+                            const parent = linkObj.parent;
+                            if (parent && (parent as any).isURDFJoint) {
+                                onSelect('joint', parent.name);
+                            } else {
+                                onSelect('link', linkObj.name, subType);
+                            }
                         }
                     }
 
+                    // Call onMeshSelect AFTER onSelect so its objectIndex wins in React batching
+                    if (onMeshSelect) {
+                        const clickedJoint = isCollisionMode ? null : findParentJoint(linkObj);
+                        onMeshSelect(linkObj.name, clickedJoint ? clickedJoint.name : null, objectIndex, subType);
+                    }
+
                     if (mode === 'detail' || !((linkObj.parent as any)?.isURDFJoint)) {
-                        highlightGeometry(linkObj.name, false, subType);
+                        // Clear all stale highlights first, then apply only the specific body
+                        highlightGeometry(linkObj.name, true, subType);
+                        highlightGeometry(linkObj.name, false, subType, isCollisionMode ? objectIndex : undefined);
                     }
 
                     hoveredLinkRef.current = null;
@@ -378,7 +431,7 @@ export function useMouseInteraction({
         const handleMouseUp = () => {
             if (isDraggingJoint.current) {
                 if (onJointChangeCommitRef.current && dragJoint.current) {
-                    const currentAngle = dragJoint.current.angle || 0;
+                    const currentAngle = dragJoint.current.angle ?? dragJoint.current.jointValue ?? 0;
                     onJointChangeCommitRef.current(dragJoint.current.name, currentAngle);
                 }
 
@@ -388,9 +441,23 @@ export function useMouseInteraction({
             }
 
             if (justSelectedRef) {
-                setTimeout(() => {
+                if (selectionResetTimerRef.current !== null) {
+                    clearTimeout(selectionResetTimerRef.current);
+                }
+                selectionResetTimerRef.current = window.setTimeout(() => {
                     justSelectedRef.current = false;
+                    selectionResetTimerRef.current = null;
                 }, 100);
+            }
+        };
+
+        const handleWindowBlur = () => {
+            handleMouseUp();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                handleMouseUp();
             }
         };
 
@@ -411,16 +478,28 @@ export function useMouseInteraction({
         gl.domElement.addEventListener('mousedown', handleMouseDown);
         gl.domElement.addEventListener('mouseup', handleMouseUp);
         gl.domElement.addEventListener('mouseleave', handleMouseLeave);
+        window.addEventListener('mouseup', handleMouseUp);
+        window.addEventListener('pointerup', handleMouseUp);
+        window.addEventListener('blur', handleWindowBlur);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
             // Cancel throttled handler to prevent pending callbacks
             throttledMouseMove.cancel();
+            if (selectionResetTimerRef.current !== null) {
+                clearTimeout(selectionResetTimerRef.current);
+                selectionResetTimerRef.current = null;
+            }
             gl.domElement.removeEventListener('mousemove', handleMouseMove);
             gl.domElement.removeEventListener('mousedown', handleMouseDown);
             gl.domElement.removeEventListener('mouseup', handleMouseUp);
             gl.domElement.removeEventListener('mouseleave', handleMouseLeave);
+            window.removeEventListener('mouseup', handleMouseUp);
+            window.removeEventListener('pointerup', handleMouseUp);
+            window.removeEventListener('blur', handleWindowBlur);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, [gl, camera, robot, onSelect, highlightGeometry, highlightMode, toolMode, mode, justSelectedRef, isOrbitDragging, showCollision, showVisual]);
+    }, [gl, camera, scene, robot, onSelect, onMeshSelect, highlightGeometry, highlightMode, toolMode, mode, justSelectedRef, isOrbitDragging, isSelectionLockedRef, showCollision, showVisual]);
 
     return {
         mouseRef,

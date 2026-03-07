@@ -1,10 +1,14 @@
 import React, { Suspense, useState, useRef, useEffect, useCallback } from 'react';
 import { Canvas, RootState } from '@react-three/fiber';
-import { OrbitControls, Environment, GizmoHelper, GizmoViewport } from '@react-three/drei';
+import { OrbitControls, GizmoHelper, GizmoViewport } from '@react-three/drei';
 import * as THREE from 'three';
-import { SnapshotManager, SceneLighting, ReferenceGrid, PerformanceMonitor } from '@/shared/components/3d';
+import { SnapshotManager, NeutralStudioEnvironment, SceneLighting, ReferenceGrid, CanvasResizeSync, UsageGuide } from '@/shared/components/3d';
 import { useEffectiveTheme } from '@/shared/hooks';
 import { translations } from '@/shared/i18n';
+import { useUIStore } from '@/store';
+import { getLowestMeshZ } from '@/shared/utils';
+import { isSingleDofJoint } from '../utils/jointTypes';
+import { offsetRobotToGround } from '../utils/robotPositioning';
 
 import type { URDFViewerProps, ToolMode, MeasureState } from '../types';
 import { RobotModel } from './RobotModel';
@@ -18,6 +22,12 @@ import { JointsPanel } from '@/shared/components/Panel/JointsPanel';
 import { useViewerSettings } from '../hooks/useViewerSettings';
 import { usePanelDrag } from '../hooks/usePanelDrag';
 
+const createEmptyMeasureState = (): MeasureState => ({
+    measurements: [],
+    currentPoints: [],
+    tempPoint: null
+});
+
 export function URDFViewer({
     urdfContent,
     assets,
@@ -26,6 +36,7 @@ export function URDFViewer({
     lang,
     mode = 'detail',
     onSelect,
+    onHover,
     theme,
     selection,
     hoveredSelection,
@@ -34,6 +45,7 @@ export function URDFViewer({
     showVisual: propShowVisual,
     setShowVisual: propSetShowVisual,
     snapshotAction,
+    isMeshPreview = false,
     onCollisionTransform,
     showToolbar = true,
     setShowToolbar,
@@ -41,7 +53,7 @@ export function URDFViewer({
     setShowOptionsPanel,
     showJointPanel = true,
     setShowJointPanel,
-    fileName
+    onTransformPendingChange
 }: URDFViewerProps) {
     const t = translations[lang];
 
@@ -77,12 +89,9 @@ export function URDFViewer({
     // WebGL context lost state
     const [contextLost, setContextLost] = useState(false);
     const glRef = useRef<THREE.WebGLRenderer | null>(null);
+    const sceneRef = useRef<THREE.Scene | null>(null);
 
-    const [measureState, setMeasureState] = useState<MeasureState>({
-        measurements: [],
-        currentPoints: [],
-        tempPoint: null
-    });
+    const [measureState, setMeasureState] = useState<MeasureState>(createEmptyMeasureState);
     
     const containerRef = useRef<HTMLDivElement>(null);
     const optionsPanelRef = useRef<HTMLDivElement>(null);
@@ -104,10 +113,11 @@ export function URDFViewer({
     useEffect(() => {
         if (selection?.subType === 'collision') {
             setHighlightMode('collision');
+            setShowCollision(true);
         } else if (selection?.subType === 'visual') {
             setHighlightMode('link');
         }
-    }, [selection?.subType]);
+    }, [selection?.subType, setHighlightMode, setShowCollision]);
 
 
     const [jointAngles, setJointAngles] = useState<Record<string, number>>({});
@@ -119,6 +129,28 @@ export function URDFViewer({
 
     const justSelectedRef = useRef(false);
     const transformPendingRef = useRef(false);
+
+    // Prevent OrbitControls from remaining disabled when pointer-up is missed (e.g. release outside canvas/window).
+    useEffect(() => {
+        const releaseDragLock = () => setIsDragging(false);
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                setIsDragging(false);
+            }
+        };
+
+        window.addEventListener('mouseup', releaseDragLock);
+        window.addEventListener('pointerup', releaseDragLock);
+        window.addEventListener('blur', releaseDragLock);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('mouseup', releaseDragLock);
+            window.removeEventListener('pointerup', releaseDragLock);
+            window.removeEventListener('blur', releaseDragLock);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
 
     // Get effective theme (light/dark) handling 'system' preference
     const effectiveTheme = useEffectiveTheme();
@@ -137,15 +169,18 @@ export function URDFViewer({
             const previousAngles = jointAnglesRef.current;
 
             Object.keys(loadedRobot.joints).forEach(name => {
-                const defaultAngle = loadedRobot.joints[name].angle || 0;
+                const loadedJoint = loadedRobot.joints[name];
+                if (!isSingleDofJoint(loadedJoint)) return;
+
+                const defaultAngle = loadedJoint.angle || 0;
                 defaultAngles[name] = defaultAngle;
 
                 // Preserve previous angle if it exists, otherwise use default
                 if (previousAngles && previousAngles[name] !== undefined) {
                     currentAngles[name] = previousAngles[name];
                     // Apply to the new robot instance immediately to prevent visual jump
-                    if (loadedRobot.joints[name].setJointValue) {
-                        loadedRobot.joints[name].setJointValue(previousAngles[name]);
+                    if (loadedJoint.setJointValue) {
+                        loadedJoint.setJointValue(previousAngles[name]);
                     }
                 } else {
                     currentAngles[name] = defaultAngle;
@@ -155,11 +190,20 @@ export function URDFViewer({
             setJointAngles(currentAngles);
             setInitialJointAngles(defaultAngles);
         }
+
     }, []);
 
     const handleTransformPending = useCallback((pending: boolean) => {
         transformPendingRef.current = pending;
-    }, []);
+        onTransformPendingChange?.(pending);
+    }, [onTransformPendingChange]);
+
+    useEffect(() => {
+        return () => {
+            transformPendingRef.current = false;
+            onTransformPendingChange?.(false);
+        };
+    }, [onTransformPendingChange]);
 
     useEffect(() => {
         if (!robot || !jointAngleState) return;
@@ -171,11 +215,26 @@ export function URDFViewer({
 
         Object.entries(jointAngleState).forEach(([name, angle]) => {
             const joint = robot.joints?.[name];
-            if (joint?.setJointValue) {
+            if (isSingleDofJoint(joint) && joint?.setJointValue) {
                 joint.setJointValue(angle);
             }
         });
     }, [robot, jointAngleState]);
+
+    useEffect(() => {
+        if (!robot) return;
+
+        const alignToGround = () => {
+            offsetRobotToGround(robot);
+            useUIStore.getState().setGroundPlaneOffset(0);
+        };
+
+        const timers = [0, 80, 220].map((delay) => window.setTimeout(alignToGround, delay));
+
+        return () => {
+            timers.forEach((timer) => window.clearTimeout(timer));
+        };
+    }, [robot]);
 
     useEffect(() => {
         if (robot && robot.joints) {
@@ -183,12 +242,15 @@ export function URDFViewer({
                 const next = { ...prev };
                 let changed = false;
                 Object.keys(robot.joints).forEach(name => {
-                    const newAngle = robot.joints[name].angle;
+                    const joint = robot.joints[name];
+                    if (!isSingleDofJoint(joint)) return;
+
+                    const newAngle = joint.angle;
                     if (newAngle !== undefined && newAngle !== prev[name]) {
                         next[name] = newAngle;
                         changed = true;
-                        if (robot.joints[name].setJointValue) {
-                            robot.joints[name].setJointValue(newAngle);
+                        if (joint.setJointValue) {
+                            joint.setJointValue(newAngle);
                         }
                     }
                 });
@@ -201,6 +263,8 @@ export function URDFViewer({
         if (!robot?.joints?.[jointName]) return;
 
         const joint = robot.joints[jointName];
+        if (!isSingleDofJoint(joint)) return;
+
         if (joint.setJointValue) {
             joint.setJointValue(angle);
         }
@@ -239,12 +303,12 @@ export function URDFViewer({
     const handleSelectWrapper = useCallback((type: 'link' | 'joint', id: string, subType?: 'visual' | 'collision') => {
         if (transformPendingRef.current) return; // Prevent selection change if transform is pending
 
-        if (onSelect) onSelect(type, id, subType || selection?.subType);
+        if (onSelect) onSelect(type, id, subType);
 
         if (type === 'link' && robot) {
             const jointName = Object.keys(robot.joints).find(name => {
                 const joint = robot.joints[name];
-                return joint?.child?.name === id && joint?.jointType !== 'fixed';
+                return joint?.child?.name === id && isSingleDofJoint(joint);
             });
             if (jointName) {
                 setActiveJoint(jointName);
@@ -252,24 +316,66 @@ export function URDFViewer({
                 setActiveJoint(null);
             }
         } else if (type === 'joint') {
-            setActiveJoint(id);
+            const joint = robot?.joints?.[id];
+            setActiveJoint(isSingleDofJoint(joint) ? id : null);
         } else {
             setActiveJoint(null);
         }
-    }, [onSelect, robot, selection?.subType]);
+    }, [onSelect, robot]);
+
+    const handleHoverWrapper = useCallback((type: 'link' | 'joint' | null, id: string | null, subType?: 'visual' | 'collision') => {
+        onHover?.(type, id, subType);
+    }, [onHover]);
+
+    const handleAutoFitGround = useCallback(() => {
+        if (!robot) return;
+        let minZ = getLowestMeshZ(robot, {
+            includeInvisible: false,
+            includeVisual: true,
+            includeCollision: false,
+        });
+        if (minZ === null) {
+            minZ = getLowestMeshZ(robot, {
+                includeInvisible: true,
+                includeVisual: true,
+                includeCollision: false,
+            });
+        }
+        if (minZ !== null) {
+            useUIStore.getState().setGroundPlaneOffset(minZ);
+        }
+    }, [robot]);
+
+    const handleToolModeChange = useCallback((nextMode: ToolMode) => {
+        setToolMode(nextMode);
+
+        if (nextMode !== 'measure') {
+            setMeasureState(prev => (
+                prev.currentPoints.length === 0 && prev.tempPoint === null
+                    ? prev
+                    : { ...prev, currentPoints: [], tempPoint: null }
+            ));
+        }
+    }, []);
+
+    const handleCloseMeasureTool = useCallback(() => {
+        setMeasureState(createEmptyMeasureState());
+        setToolMode('select');
+        onHover?.(null, null);
+    }, [onHover]);
 
     // Handle WebGL context creation and context lost/restored events
     const handleCanvasCreated = useCallback((state: RootState) => {
         const gl = state.gl;
         const scene = state.scene;
         glRef.current = gl;
+        sceneRef.current = scene;
         const canvas = gl.domElement;
 
-        // Expose scene to window for debugging
-        if (typeof window !== 'undefined') {
+        // Expose scene to window for debugging (development only)
+        if (typeof window !== 'undefined' && import.meta.env.DEV) {
             (window as any).scene = scene;
             (window as any).THREE = THREE;
-            console.log('Three.js scene exposed to window.scene');
         }
 
         const handleContextLost = (event: Event) => {
@@ -307,11 +413,12 @@ export function URDFViewer({
         if (!robot) return;
 
         if (selection?.type === 'joint' && selection.id) {
-            setActiveJoint(selection.id);
+            const joint = robot.joints[selection.id];
+            setActiveJoint(isSingleDofJoint(joint) ? selection.id : null);
         } else if (selection?.type === 'link' && selection.id) {
             const jointName = Object.keys(robot.joints).find(name => {
                 const joint = robot.joints[name];
-                return joint?.child?.name === selection.id && joint?.jointType !== 'fixed';
+                return joint?.child?.name === selection.id && isSingleDofJoint(joint);
             });
             if (jointName) {
                 setActiveJoint(jointName);
@@ -326,7 +433,7 @@ export function URDFViewer({
     return (
         <div
             ref={containerRef}
-            className="flex-1 relative bg-google-light-bg dark:bg-google-dark-bg h-full min-w-0 overflow-hidden"
+            className="flex-1 relative bg-google-light-bg dark:bg-google-dark-bg h-full min-w-0"
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
@@ -337,6 +444,9 @@ export function URDFViewer({
                     {mode === 'hardware' ? t.hardware : t.detail} {t.modeLabel}
                 </div>
             </div>
+
+            {/* Usage Guide */}
+            <UsageGuide lang={lang} />
 
             {/* Settings panel */}
             <ViewerOptionsPanel
@@ -349,7 +459,6 @@ export function URDFViewer({
                 isOptionsCollapsed={isOptionsCollapsed}
                 toggleOptionsCollapsed={toggleOptionsCollapsed}
                 setShowOptionsPanel={setShowOptionsPanel}
-                fileName={fileName}
                 lang={lang}
                 highlightMode={highlightMode}
                 setHighlightMode={setHighlightMode}
@@ -383,6 +492,7 @@ export function URDFViewer({
                 setShowInertia={setShowInertia}
                 showInertiaOverlay={showInertiaOverlay}
                 setShowInertiaOverlay={setShowInertiaOverlay}
+                onAutoFitGround={handleAutoFitGround}
             />
 
             {/* Joint controls panel */}
@@ -406,13 +516,14 @@ export function URDFViewer({
                 handleJointAngleChange={handleJointAngleChange}
                 handleJointChangeCommit={handleJointChangeCommit}
                 onSelect={handleSelectWrapper}
+                onHover={handleHoverWrapper}
             />
 
             {/* Toolbar */}
             {showToolbar && (
                 <ViewerToolbar
                     activeMode={toolMode}
-                    setMode={setToolMode}
+                    setMode={handleToolModeChange}
                     onClose={setShowToolbar ? () => setShowToolbar(false) : undefined}
                     lang={lang}
                 />
@@ -424,6 +535,7 @@ export function URDFViewer({
                 measurePanelRef={measurePanelRef}
                 measurePanelPos={measurePanelPos}
                 onMouseDown={(e) => handleMouseDown('measure', e)}
+                onClose={handleCloseMeasureTool}
                 measureState={measureState}
                 setMeasureState={setMeasureState}
                 lang={lang}
@@ -434,7 +546,7 @@ export function URDFViewer({
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50">
                     <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-xl text-center">
                         <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
-                        <p className="text-gray-700 dark:text-gray-300">WebGL context lost, restoring...</p>
+                        <p className="text-gray-700 dark:text-gray-300">{t.webglContextRestoring}</p>
                     </div>
                 </div>
             )}
@@ -447,7 +559,6 @@ export function URDFViewer({
                     antialias: true,
                     toneMapping: THREE.ACESFilmicToneMapping,
                     toneMappingExposure: 1.1,
-                    preserveDrawingBuffer: true,
                     powerPreference: 'high-performance',
                     failIfMajorPerformanceCaveat: false,
                 }}
@@ -462,10 +573,10 @@ export function URDFViewer({
                     setActiveJoint(null);
                 }}
             >
+                <CanvasResizeSync />
                 <color attach="background" args={[effectiveTheme === 'light' ? '#f8f9fa' : '#1f1f1f']} />
-                <PerformanceMonitor />
-                <SceneLighting theme={effectiveTheme} />
-                <Environment files="/potsdamer_platz_1k.hdr" environmentIntensity={1.2} />
+                <NeutralStudioEnvironment intensity={0.36} />
+                <SceneLighting theme={effectiveTheme} cameraFollowPrimary />
                 <SnapshotManager actionRef={snapshotAction} robotName={robot?.name || 'robot'} />
 
                 <MeasureTool
@@ -473,6 +584,7 @@ export function URDFViewer({
                     robot={robot}
                     measureState={measureState}
                     setMeasureState={setMeasureState}
+                    deleteTooltip={t.deleteMeasurement}
                 />
 
                 <Suspense fallback={null}>
@@ -483,6 +595,7 @@ export function URDFViewer({
                         showCollision={showCollision}
                         showVisual={showVisual}
                         onSelect={handleSelectWrapper}
+                        onMeshSelect={onMeshSelect}
                         onJointChange={handleJointAngleChange}
                         onJointChangeCommit={handleJointChangeCommit}
                         jointAngles={jointAngles}
@@ -513,6 +626,8 @@ export function URDFViewer({
                         onCollisionTransformEnd={onCollisionTransform}
                         isOrbitDragging={isOrbitDragging}
                         onTransformPending={handleTransformPending}
+                        isSelectionLockedRef={transformPendingRef}
+                        isMeshPreview={isMeshPreview}
                     />
                 </Suspense>
 
@@ -549,8 +664,12 @@ export function URDFViewer({
                     onEnd={() => { isOrbitDragging.current = false; }}
                 />
 
-                <GizmoHelper alignment="bottom-right" margin={[80, 80]}>
-                    <GizmoViewport labelColor={effectiveTheme === 'light' ? '#0f172a' : 'white'} axisHeadScale={1} />
+                <GizmoHelper alignment="bottom-right" margin={[68, 68]}>
+                    <GizmoViewport
+                        labelColor={effectiveTheme === 'light' ? '#0f172a' : 'white'}
+                        axisHeadScale={0.9}
+                        scale={34}
+                    />
                 </GizmoHelper>
 
             </Canvas>

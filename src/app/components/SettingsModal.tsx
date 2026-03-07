@@ -3,7 +3,7 @@
  * Draggable settings panel for UI configuration (Theme, Language, Scale)
  */
 import React from 'react';
-import { Settings, X, Sun, Moon, Monitor, Type, Languages, RotateCcw, AlertTriangle, Activity } from 'lucide-react';
+import { Settings, X, Sun, Moon, Monitor, Type, Languages, RotateCcw, AlertTriangle } from 'lucide-react';
 import { useUIStore } from '@/store';
 import { 
   SegmentedControl, 
@@ -67,22 +67,22 @@ export function SettingsModal() {
   return (
     <div
       style={{ left: settingsPos.x, top: settingsPos.y }}
-      className="fixed z-[100] w-[320px] bg-white dark:bg-[#2C2C2E] rounded-[16px] shadow-[0_12px_32px_rgba(0,0,0,0.25)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.5)] border border-slate-200 dark:border-black/50 overflow-hidden"
+      className="fixed z-[100] w-[320px] bg-panel-bg rounded-2xl shadow-xl border border-border-black overflow-hidden"
     >
       {/* Header */}
       <div
         onMouseDown={handleDragStart}
-        className="bg-slate-50 dark:bg-[#2C2C2E] px-4 py-3 border-b border-slate-200 dark:border-black/50 flex items-center justify-between cursor-move select-none"
+        className="bg-element-bg px-4 py-3 border-b border-border-black flex items-center justify-between cursor-move select-none"
       >
         <div className="flex items-center gap-2">
-          <Settings className="w-4 h-4 text-slate-500 dark:text-slate-400" />
-          <h2 className="text-sm font-bold text-slate-800 dark:text-white">
+          <Settings className="w-4 h-4 text-text-tertiary" />
+          <h2 className="text-sm font-semibold text-text-primary">
             {lang === 'zh' ? '设置' : 'Settings'}
           </h2>
         </div>
         <button
           onClick={closeSettings}
-          className="p-1.5 text-slate-500 hover:bg-red-500 hover:text-white dark:text-slate-400 dark:hover:bg-red-600 dark:hover:text-white rounded transition-colors"
+          className="p-1.5 text-text-tertiary hover:bg-red-500 hover:text-white rounded-md transition-colors"
         >
           <X className="w-4 h-4" />
         </button>
@@ -142,39 +142,6 @@ export function SettingsModal() {
         {/* Divider */}
         <Separator />
 
-        {/* Performance Settings */}
-        <div className="space-y-3">
-          <Label className="flex items-center gap-2 text-slate-900 dark:text-slate-100 font-medium">
-            <Activity className="w-3.5 h-3.5" />
-            {lang === 'zh' ? '性能监控' : 'Performance'}
-          </Label>
-          
-          <div className="pl-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-600 dark:text-slate-400">
-                {lang === 'zh' ? '显示帧数 (FPS)' : 'Show FPS'}
-              </span>
-              <Switch
-                checked={viewOptions.showFPS}
-                onChange={(checked) => setViewOption('showFPS', checked)}
-              />
-            </div>
-            
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-600 dark:text-slate-400">
-                {lang === 'zh' ? '显示显卡占用' : 'Show Render Stats'}
-              </span>
-              <Switch
-                checked={viewOptions.showMemory}
-                onChange={(checked) => setViewOption('showMemory', checked)}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Divider */}
-        <Separator />
-
         {/* UI Scale Setting */}
         <div className="space-y-2">
           <Slider
@@ -188,7 +155,7 @@ export function SettingsModal() {
             showValue={true}
             formatValue={(val) => `${(val * 100).toFixed(0)}%`}
           />
-          <div className="relative h-4 text-[10px] text-slate-400 select-none px-1">
+          <div className="relative h-4 text-[10px] text-text-tertiary select-none px-1">
             <span className="absolute left-0">80%</span>
             <span className="absolute left-[28.57%] -translate-x-1/2">100%</span>
             <span className="absolute right-0">150%</span>

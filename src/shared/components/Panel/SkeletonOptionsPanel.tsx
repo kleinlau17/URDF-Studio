@@ -1,4 +1,5 @@
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useCallback } from 'react';
+import { Crosshair } from 'lucide-react';
 import { Language, translations } from '@/shared/i18n';
 import { useUIStore } from '@/store';
 import {
@@ -35,6 +36,7 @@ interface SkeletonOptionsPanelProps {
   onResetPosition: () => void;
   onClose?: () => void;
   optionsPanelPos: { x: number; y: number } | null;
+  onAutoFitGround?: () => void;
 }
 
 export const SkeletonOptionsPanel = forwardRef<HTMLDivElement, SkeletonOptionsPanelProps>(
@@ -63,24 +65,31 @@ export const SkeletonOptionsPanel = forwardRef<HTMLDivElement, SkeletonOptionsPa
       onResetPosition,
       onClose,
       optionsPanelPos,
+      onAutoFitGround,
     },
     ref
   ) => {
     const t = translations[lang];
     const panelSections = useUIStore((state) => state.panelSections);
     const setPanelSection = useUIStore((state) => state.setPanelSection);
+    const groundPlaneOffset = useUIStore((state) => state.groundPlaneOffset);
+    const setGroundPlaneOffset = useUIStore((state) => state.setGroundPlaneOffset);
+
+    const handleResetGround = useCallback(() => {
+      setGroundPlaneOffset(0);
+    }, [setGroundPlaneOffset]);
 
     return (
       <div
         ref={ref}
-        className="absolute z-10 pointer-events-auto"
+        className="absolute z-40 pointer-events-auto"
         style={
           optionsPanelPos
             ? { left: optionsPanelPos.x, top: optionsPanelPos.y, right: 'auto' }
             : { top: '16px', right: '16px' }
         }
       >
-        <OptionsPanelContainer>
+        <OptionsPanelContainer isCollapsed={isCollapsed} resizeTitle={t.resize}>
           <OptionsPanelHeader
             title={t.skeletonOptions}
             isCollapsed={isCollapsed}
@@ -174,6 +183,41 @@ export const SkeletonOptionsPanel = forwardRef<HTMLDivElement, SkeletonOptionsPa
                     indent
                   />
                 )}
+              </div>
+            </CollapsibleSection>
+
+            {/* Ground Plane */}
+            <CollapsibleSection
+              title={t.groundPlane}
+              isCollapsed={panelSections['skeleton_ground'] ?? true}
+              onToggle={() => setPanelSection('skeleton_ground', !(panelSections['skeleton_ground'] ?? false))}
+            >
+              <SliderOption
+                label={t.groundPlaneOffset}
+                value={groundPlaneOffset}
+                onChange={setGroundPlaneOffset}
+                min={-2}
+                max={2}
+                step={0.01}
+                compact
+                indent={false}
+              />
+              <div className="flex gap-1.5 px-3 pb-2">
+                {onAutoFitGround && (
+                  <button
+                    onClick={onAutoFitGround}
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-medium bg-system-blue/10 dark:bg-system-blue/20 text-system-blue rounded-md hover:bg-system-blue/15 dark:hover:bg-system-blue/25 transition-colors"
+                  >
+                    <Crosshair size={11} />
+                    {t.autoFitGround}
+                  </button>
+                )}
+                <button
+                  onClick={handleResetGround}
+                  className="flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-medium bg-element-bg text-text-secondary dark:text-text-secondary rounded-md hover:bg-element-hover transition-colors"
+                >
+                  {t.reset}
+                </button>
               </div>
             </CollapsibleSection>
 

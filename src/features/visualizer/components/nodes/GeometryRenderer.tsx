@@ -1,6 +1,6 @@
 import React, { memo, useState } from 'react';
 import * as THREE from 'three';
-import { GeometryType, UrdfLink } from '@/types';
+import { GeometryType, UrdfLink, UrdfVisual } from '@/types';
 import { STLRenderer, OBJRenderer, DAERenderer } from '@/shared/components/3d';
 import { getCachedMaterial } from '../../utils/materialCache';
 import { findAssetByPath } from '@/core/loaders/meshLoader';
@@ -17,6 +17,8 @@ interface GeometryRendererProps {
   onLinkClick: (e: any, subType?: 'visual' | 'collision') => void;
   setVisualRef?: (ref: THREE.Group | null) => void;
   setCollisionRef?: (ref: THREE.Group | null) => void;
+  geometryData?: UrdfVisual;
+  geometryId?: string;
 }
 
 /**
@@ -35,8 +37,10 @@ export const GeometryRenderer = memo(function GeometryRenderer({
   onLinkClick,
   setVisualRef,
   setCollisionRef,
+  geometryData,
+  geometryId,
 }: GeometryRendererProps) {
-  const data = isCollision ? link.collision : link.visual;
+  const data = geometryData || (isCollision ? link.collision : link.visual);
 
   // Fallback if collision data doesn't exist yet
   if (isCollision && !data) return null;
@@ -57,7 +61,7 @@ export const GeometryRenderer = memo(function GeometryRenderer({
   if (type === GeometryType.NONE) return null;
 
   // Create a unique key based on geometry properties
-  const geometryKey = `${isCollision ? 'col' : 'vis'}-${type}-${dimensions.x}-${dimensions.y}-${dimensions.z}-${meshPath || 'none'}`;
+  const geometryKey = `${isCollision ? 'col' : 'vis'}-${geometryId || 'primary'}-${type}-${dimensions.x}-${dimensions.y}-${dimensions.z}-${meshPath || 'none'}`;
 
   const isSkeleton = mode === 'skeleton';
 
@@ -144,6 +148,9 @@ export const GeometryRenderer = memo(function GeometryRenderer({
       ? ([origin.rpy.r, origin.rpy.p, origin.rpy.y] as [number, number, number])
       : undefined,
     ref: isCollision ? setCollisionRef : setVisualRef,
+    userData: {
+      geometryRole: isCollision ? 'collision' : 'visual',
+    },
   };
 
   let geometryNode;
@@ -197,6 +204,14 @@ export const GeometryRenderer = memo(function GeometryRenderer({
   } else if (type === GeometryType.MESH) {
     let assetUrl = meshPath ? findAssetByPath(meshPath, assets) : undefined;
 
+    // Try to find asset with component-specific prefix if available
+    if (!assetUrl && meshPath) {
+      const potentialKeys = Object.keys(assets).filter(k => k.endsWith(meshPath));
+      if (potentialKeys.length > 0) {
+        assetUrl = assets[potentialKeys[potentialKeys.length - 1]];
+      }
+    }
+
     if (meshPath && assetUrl) {
       const url = assetUrl;
       const ext = meshPath.split('.').pop()?.toLowerCase();
@@ -211,7 +226,12 @@ export const GeometryRenderer = memo(function GeometryRenderer({
         geometryNode = <DAERenderer url={url} material={material} assets={assets} scale={dimensions} />;
       } else {
         // Fallback for unknown extension
-        geometryNode = <mesh geometry={new THREE.BoxGeometry(0.1, 0.1, 0.1)} material={material} />;
+        geometryNode = (
+          <mesh>
+            <boxGeometry args={[0.1, 0.1, 0.1]} />
+            <primitive object={material} attach="material" />
+          </mesh>
+        );
       }
     } else {
       // Placeholder if no mesh loaded

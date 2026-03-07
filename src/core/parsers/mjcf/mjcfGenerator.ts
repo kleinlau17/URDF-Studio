@@ -4,9 +4,23 @@
  */
 
 import { RobotState, GeometryType, JointType, UrdfLink } from '@/types';
+import { normalizeMeshPathForExport } from '../meshPathUtils';
 
-export const generateMujocoXML = (robot: RobotState): string => {
+export type MjcfActuatorType = 'position' | 'velocity' | 'motor';
+
+export interface MujocoExportOptions {
+  meshdir?: string;
+  addFloatBase?: boolean;
+  includeActuators?: boolean;
+  actuatorType?: MjcfActuatorType;
+}
+
+export const generateMujocoXML = (robot: RobotState, options: MujocoExportOptions = {}): string => {
   const { name, links, joints, rootLinkId } = robot;
+  const meshdir = options.meshdir ?? '../meshes/';
+  const addFloatBase = options.addFloatBase ?? false;
+  const includeActuators = options.includeActuators ?? true;
+  const actuatorType = options.actuatorType ?? 'position';
 
   // Helper to format numbers
   const f = (n: number) => n.toFixed(4);
@@ -23,26 +37,62 @@ export const generateMujocoXML = (robot: RobotState): string => {
     return `${f(r)} ${f(g)} ${f(b)} 1.0`;
   };
 
-  // Collect all mesh assets
+  // Collect all mesh assets and create stable MJCF mesh names.
   const meshAssets = new Set<string>();
   Object.values(links).forEach(link => {
     if (link.visual.type === GeometryType.MESH && link.visual.meshPath) {
-      meshAssets.add(link.visual.meshPath);
+      const meshPath = normalizeMeshPathForExport(link.visual.meshPath);
+      if (meshPath) meshAssets.add(meshPath);
     }
     if (link.collision && link.collision.type === GeometryType.MESH && link.collision.meshPath) {
-      meshAssets.add(link.collision.meshPath);
+      const meshPath = normalizeMeshPathForExport(link.collision.meshPath);
+      if (meshPath) meshAssets.add(meshPath);
     }
+    (link.collisionBodies || []).forEach((body) => {
+      if (body.type === GeometryType.MESH && body.meshPath) {
+        const meshPath = normalizeMeshPathForExport(body.meshPath);
+        if (meshPath) meshAssets.add(meshPath);
+      }
+    });
   });
 
+  const meshAssetNameMap = new Map<string, string>();
+  const usedAssetNames = new Set<string>();
+  const buildMeshAssetName = (meshPath: string): string => {
+    const base = meshPath
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[^a-zA-Z0-9_]/g, '_')
+      .replace(/^_+|_+$/g, '') || 'mesh';
+
+    let candidate = base;
+    let i = 2;
+    while (usedAssetNames.has(candidate)) {
+      candidate = `${base}_${i}`;
+      i += 1;
+    }
+    usedAssetNames.add(candidate);
+    return candidate;
+  };
+
+  Array.from(meshAssets).forEach((meshPath) => {
+    meshAssetNameMap.set(meshPath, buildMeshAssetName(meshPath));
+  });
+
+  const resolveMeshAssetName = (meshPath?: string): string | null => {
+    if (!meshPath) return null;
+    const normalized = normalizeMeshPathForExport(meshPath);
+    if (!normalized) return null;
+    return meshAssetNameMap.get(normalized) || null;
+  };
+
   let xml = `<mujoco model="${name}">\n`;
-  xml += `  <compiler angle="radian" meshdir="../meshes/" />\n`;
+  xml += `  <compiler angle="radian" meshdir="${meshdir}" />\n`;
 
   // Assets Section
   xml += `  <asset>\n`;
   meshAssets.forEach(mesh => {
-    // Assuming mesh files are .stl/.obj. MuJoCo needs unique names.
-    // We use the filename as the mesh name.
-    xml += `    <mesh name="${mesh}" file="${mesh}" />\n`;
+    const meshName = meshAssetNameMap.get(mesh) || 'mesh';
+    xml += `    <mesh name="${meshName}" file="${mesh}" />\n`;
   });
   xml += `  </asset>\n\n`;
 
@@ -123,38 +173,51 @@ export const generateMujocoXML = (robot: RobotState): string => {
             // MuJoCo capsule size is radius half-height
             vGeomAttrs += ` type="capsule" size="${f(v.dimensions.x)} ${f(v.dimensions.y/2)}"`;
         } else if (v.type === GeometryType.MESH && v.meshPath) {
-            vGeomAttrs += ` type="mesh" mesh="${v.meshPath}"`;
+            const meshAssetName = resolveMeshAssetName(v.meshPath);
+            if (meshAssetName) {
+                vGeomAttrs += ` type="mesh" mesh="${meshAssetName}"`;
+            } else {
+                const fallback = normalizeMeshPathForExport(v.meshPath);
+                if (fallback) vGeomAttrs += ` type="mesh" mesh="${fallback}"`;
+            }
         }
 
         bodyXml += `${indent}  <geom ${vGeomAttrs} />\n`;
     }
 
-    // 4. Collision Geom (group 0 is default collision)
-    // For simplicity in this exporter, we map collision similarly but usually hidden or different color
-    // If collision exists
-    if (link.collision && link.collision.type !== GeometryType.NONE) {
-         const c = link.collision;
-         let cPos = "0 0 0";
-         let cEuler = "0 0 0";
-         if (c.origin) {
-            cPos = vecStr(c.origin.xyz);
-            cEuler = rotStr(c.origin.rpy);
-         }
-         let cGeomAttrs = `pos="${cPos}" euler="${cEuler}" rgba="1 0 0 0.5" group="0"`; // group 0 for collision
+    // 4. Collision Geoms (group 0 is default collision)
+    const collisionGeoms = [link.collision, ...(link.collisionBodies || [])]
+      .filter((c) => c && c.type !== GeometryType.NONE);
 
-         if (c.type === GeometryType.BOX) {
-            cGeomAttrs += ` type="box" size="${f(c.dimensions.x/2)} ${f(c.dimensions.y/2)} ${f(c.dimensions.z/2)}"`;
-        } else if (c.type === GeometryType.CYLINDER) {
-            cGeomAttrs += ` type="cylinder" size="${f(c.dimensions.x)} ${f(c.dimensions.y/2)}"`;
-        } else if (c.type === GeometryType.SPHERE) {
-            cGeomAttrs += ` type="sphere" size="${f(c.dimensions.x)}"`;
-        } else if (c.type === GeometryType.CAPSULE) {
-            cGeomAttrs += ` type="capsule" size="${f(c.dimensions.x)} ${f(c.dimensions.y/2)}"`;
-        } else if (c.type === GeometryType.MESH && c.meshPath) {
-            cGeomAttrs += ` type="mesh" mesh="${c.meshPath}"`;
+    collisionGeoms.forEach((c) => {
+      let cPos = "0 0 0";
+      let cEuler = "0 0 0";
+      if (c.origin) {
+        cPos = vecStr(c.origin.xyz);
+        cEuler = rotStr(c.origin.rpy);
+      }
+      let cGeomAttrs = `pos="${cPos}" euler="${cEuler}" rgba="1 0 0 0.5" group="0"`;
+
+      if (c.type === GeometryType.BOX) {
+        cGeomAttrs += ` type="box" size="${f(c.dimensions.x / 2)} ${f(c.dimensions.y / 2)} ${f(c.dimensions.z / 2)}"`;
+      } else if (c.type === GeometryType.CYLINDER) {
+        cGeomAttrs += ` type="cylinder" size="${f(c.dimensions.x)} ${f(c.dimensions.y / 2)}"`;
+      } else if (c.type === GeometryType.SPHERE) {
+        cGeomAttrs += ` type="sphere" size="${f(c.dimensions.x)}"`;
+      } else if (c.type === GeometryType.CAPSULE) {
+        cGeomAttrs += ` type="capsule" size="${f(c.dimensions.x)} ${f(c.dimensions.y / 2)}"`;
+      } else if (c.type === GeometryType.MESH && c.meshPath) {
+        const meshAssetName = resolveMeshAssetName(c.meshPath);
+        if (meshAssetName) {
+          cGeomAttrs += ` type="mesh" mesh="${meshAssetName}"`;
+        } else {
+          const fallback = normalizeMeshPathForExport(c.meshPath);
+          if (fallback) cGeomAttrs += ` type="mesh" mesh="${fallback}"`;
         }
-        bodyXml += `${indent}  <geom ${cGeomAttrs} />\n`;
-    }
+      }
+
+      bodyXml += `${indent}  <geom ${cGeomAttrs} />\n`;
+    });
 
 
     // 5. Recursively add children
@@ -167,20 +230,43 @@ export const generateMujocoXML = (robot: RobotState): string => {
     return bodyXml;
   };
 
-  xml += buildBody(rootLinkId, "    ");
+  const rootBodyXml = buildBody(rootLinkId, "    ");
+  if (addFloatBase) {
+    // Inject <freejoint/> right after the opening <body ...> line
+    const firstNewline = rootBodyXml.indexOf('\n');
+    xml += rootBodyXml.slice(0, firstNewline + 1) + '      <freejoint/>\n' + rootBodyXml.slice(firstNewline + 1);
+  } else {
+    xml += rootBodyXml;
+  }
 
   xml += `  </worldbody>\n`;
 
-  // Actuators
-  xml += `  <actuator>\n`;
-  Object.values(joints).forEach(j => {
+  // Actuators (conditional)
+  if (includeActuators && actuatorType !== 'motor') {
+    xml += `  <actuator>\n`;
+    Object.values(joints).forEach(j => {
       if (j.type !== JointType.FIXED) {
-          // Add a position servo by default for revolute/prismatic
-          xml += `    <position name="${j.name}_servo" joint="${j.name}" kp="50" />\n`;
-          // Alternatively could use motor: <motor name="${j.name}_motor" joint="${j.name}" gear="1" />
+        // Use joint dynamics for actuator gains
+        const kv = j.dynamics?.damping ?? 1.0;
+        const kp = j.limit?.effort ? j.limit.effort * 0.5 : 100.0;
+        
+        if (actuatorType === 'position') {
+          xml += `    <position name="${j.name}_servo" joint="${j.name}" kp="${f(kp)}" />\n`;
+        } else if (actuatorType === 'velocity') {
+          xml += `    <velocity name="${j.name}_vel" joint="${j.name}" kv="${f(kv)}" />\n`;
+        }
       }
-  });
-  xml += `  </actuator>\n`;
+    });
+    xml += `  </actuator>\n`;
+  } else if (includeActuators && actuatorType === 'motor') {
+    xml += `  <actuator>\n`;
+    Object.values(joints).forEach(j => {
+      if (j.type !== JointType.FIXED) {
+        xml += `    <motor name="${j.name}_motor" joint="${j.name}" gear="1" />\n`;
+      }
+    });
+    xml += `  </actuator>\n`;
+  }
 
   xml += `</mujoco>`;
   return xml;

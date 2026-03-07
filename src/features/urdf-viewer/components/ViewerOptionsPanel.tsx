@@ -1,5 +1,5 @@
-import React from 'react';
-import { Move, ArrowUpRight } from 'lucide-react';
+import React, { useCallback } from 'react';
+import { Move, ArrowUpRight, Crosshair } from 'lucide-react';
 import { useUIStore } from '@/store';
 import {
     CheckboxOption,
@@ -8,8 +8,7 @@ import {
     OptionsPanelHeader,
     OptionsPanelContent,
     SegmentedControl,
-    CollapsibleSection,
-    ModelHeaderBadge
+    CollapsibleSection
 } from '@/shared/components/Panel/OptionsPanel';
 
 interface ViewerOptionsPanelProps {
@@ -22,7 +21,6 @@ interface ViewerOptionsPanelProps {
     isOptionsCollapsed: boolean;
     toggleOptionsCollapsed: () => void;
     setShowOptionsPanel?: (show: boolean) => void;
-    fileName?: string;
     lang: string;
     highlightMode: 'link' | 'collision';
     setHighlightMode: (mode: 'link' | 'collision') => void;
@@ -56,6 +54,7 @@ interface ViewerOptionsPanelProps {
     setShowInertia: (show: boolean) => void;
     showInertiaOverlay: boolean;
     setShowInertiaOverlay: (show: boolean) => void;
+    onAutoFitGround?: () => void;
 }
 
 export const ViewerOptionsPanel: React.FC<ViewerOptionsPanelProps> = ({
@@ -68,7 +67,6 @@ export const ViewerOptionsPanel: React.FC<ViewerOptionsPanelProps> = ({
     isOptionsCollapsed,
     toggleOptionsCollapsed,
     setShowOptionsPanel,
-    fileName,
     lang,
     highlightMode,
     setHighlightMode,
@@ -102,22 +100,29 @@ export const ViewerOptionsPanel: React.FC<ViewerOptionsPanelProps> = ({
     setShowInertia,
     showInertiaOverlay,
     setShowInertiaOverlay,
+    onAutoFitGround,
 }) => {
     const panelSections = useUIStore((state) => state.panelSections);
     const setPanelSection = useUIStore((state) => state.setPanelSection);
+    const groundPlaneOffset = useUIStore((state) => state.groundPlaneOffset);
+    const setGroundPlaneOffset = useUIStore((state) => state.setGroundPlaneOffset);
+
+    const handleResetGround = useCallback(() => {
+        setGroundPlaneOffset(0);
+    }, [setGroundPlaneOffset]);
 
     if (!showOptionsPanel) return null;
 
     return (
         <div
             ref={optionsPanelRef}
-            className="absolute z-30 pointer-events-auto"
+            className="absolute z-40 pointer-events-auto"
             style={optionsPanelPos
                 ? { left: optionsPanelPos.x, top: optionsPanelPos.y, right: 'auto' }
                 : { top: '16px', right: '16px' }
             }
         >
-            <OptionsPanelContainer resizable={true}>
+            <OptionsPanelContainer resizable={true} isCollapsed={isOptionsCollapsed} resizeTitle={t.resize}>
                 <OptionsPanelHeader
                     title={mode === 'hardware' ? t.hardwareOptions : t.detailOptions}
                     isCollapsed={isOptionsCollapsed}
@@ -127,9 +132,6 @@ export const ViewerOptionsPanel: React.FC<ViewerOptionsPanelProps> = ({
                 />
 
                 <OptionsPanelContent isCollapsed={isOptionsCollapsed}>
-                        {/* Loaded File Display */}
-                        {fileName && <ModelHeaderBadge fileName={fileName} />}
-
                         <div className="p-2 pb-0">
                             <SegmentedControl
                                 options={[
@@ -269,6 +271,41 @@ export const ViewerOptionsPanel: React.FC<ViewerOptionsPanelProps> = ({
                                         </svg>
                                     </button>
                                 )}
+                            </div>
+                        </CollapsibleSection>
+
+                        {/* Ground Plane */}
+                        <CollapsibleSection
+                            title={t.groundPlane}
+                            isCollapsed={panelSections['viewer_ground'] ?? true}
+                            onToggle={() => setPanelSection('viewer_ground', !(panelSections['viewer_ground'] ?? false))}
+                        >
+                            <SliderOption
+                                label={t.groundPlaneOffset}
+                                value={groundPlaneOffset}
+                                onChange={setGroundPlaneOffset}
+                                min={-2}
+                                max={2}
+                                step={0.01}
+                                compact
+                                indent={false}
+                            />
+                            <div className="flex gap-1.5 px-3 pb-2">
+                                {onAutoFitGround && (
+                                    <button
+                                        onClick={onAutoFitGround}
+                                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                                    >
+                                        <Crosshair size={11} />
+                                        {t.autoFitGround}
+                                    </button>
+                                )}
+                                <button
+                                    onClick={handleResetGround}
+                                    className="flex items-center justify-center gap-1 px-2 py-1 text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                                >
+                                    {t.reset}
+                                </button>
                             </div>
                         </CollapsibleSection>
                 </OptionsPanelContent>

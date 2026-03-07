@@ -5,9 +5,9 @@
 export type Language = 'en' | 'zh';
 
 export interface TranslationKeys {
-  // URDF Square
-  urdfSquare: string;
-  square: string;
+  // URDF Gallery
+  urdfGallery: string;
+  gallery: string;
   searchModels: string;
   featuredModels: string;
   findNextProject: string;
@@ -43,6 +43,8 @@ export interface TranslationKeys {
   import: string;
   importFolder: string;
   export: string;
+  exportProject: string;
+  importUsp: string;
 
   // Tree Editor
   robotName: string;
@@ -50,6 +52,23 @@ export interface TranslationKeys {
   addChildLink: string;
   addChildJoint: string;
   deleteBranch: string;
+  rename: string;
+  deleteMesh: string;
+  deleteVisualGeometry: string;
+  deleteCollisionGeometry: string;
+  addCollisionBody: string;
+
+  // Assembly
+  components: string;
+  bridges: string;
+  addComponent: string;
+  createBridge: string;
+  bridgeJoint: string;
+  parentComponent: string;
+  parentLink: string;
+  childComponent: string;
+  childLink: string;
+  add: string;
 
   // Property Editor
   properties: string;
@@ -58,6 +77,12 @@ export interface TranslationKeys {
   visualGeometry: string;
   collisionGeometry: string;
   type: string;
+  jointTypeFixed: string;
+  jointTypeRevolute: string;
+  jointTypeContinuous: string;
+  jointTypePrismatic: string;
+  jointTypePlanar: string;
+  jointTypeFloating: string;
   dimensions: string;
   originRelativeLink: string;
   originRelativeParent: string;
@@ -70,6 +95,8 @@ export interface TranslationKeys {
   meshLibrary: string;
   upload: string;
   selected: string;
+  applyMesh: string;
+  meshHint: string;
   inertial: string;
   mass: string;
   centerOfMass: string;
@@ -102,11 +129,13 @@ export interface TranslationKeys {
   box: string;
   cylinder: string;
   sphere: string;
+  capsule: string;
   mesh: string;
   width: string;
   depth: string;
   height: string;
   radius: string;
+  totalLength: string;
 
   // Visualizer
   skeletonOptions: string;
@@ -125,6 +154,8 @@ export interface TranslationKeys {
   instruction: string;
   instructionWin: string;
   instructionMac: string;
+  instructionLinux: string;
+  instructionOther: string;
   clickToSelect: string;
   enableLabels: string;
   clickLabels: string;
@@ -168,6 +199,7 @@ export interface TranslationKeys {
   showCenterOfMass: string;
   showInertia: string;
   jointControls: string;
+  joints: string;
   viewOptions: string;
   loadingRobot: string;
   enterRobotName: string;
@@ -199,6 +231,8 @@ export interface TranslationKeys {
 
   // Additional UI Elements
   gizmos: string;
+  visuals: string;
+  physics: string;
   size: string;
   resetJoints: string;
   reset: string;
@@ -222,6 +256,35 @@ export interface TranslationKeys {
   copied: string;
   fileBrowser: string;
   dropOrImport: string;
+  simpleMode: string;
+  proMode: string;
+  structureTree: string;
+  assemblyTree: string;
+  projectName: string;
+  enterProjectName: string;
+  filePreview: string;
+  closePreview: string;
+  preview: string;
+  noPreviewImage: string;
+  loadedModel: string;
+  resize: string;
+  bridgeJointNamePlaceholder: string;
+  originX: string;
+  originY: string;
+  originZ: string;
+  meshNotFound: string;
+  deleteMeasurement: string;
+  webglContextRestoring: string;
+  emptyAssemblyHint: string;
+  clickToAddComponent: string;
+  removeFromLibrary: string;
+  rightClickToRename: string;
+  rightClickForActions: string;
+
+  // Ground Plane
+  groundPlane: string;
+  groundPlaneOffset: string;
+  autoFitGround: string;
 
   // Measure Tool
   measureTool: string;
@@ -236,6 +299,33 @@ export interface TranslationKeys {
   performance: string;
   showFPS: string;
   showMemory: string;
+
+  // Export Dialog
+  exportDialog: string;
+  exportFormat: string;
+  exportFormatMJCF: string;
+  exportFormatURDF: string;
+  exportFormatUSD: string;
+  exportComingSoon: string;
+  simulatorPreset: string;
+  presetCustom: string;
+  exportMeshdir: string;
+  exportFloatBase: string;
+  exportFloatBaseDesc: string;
+  exportIncludeActuators: string;
+  exportActuatorType: string;
+  exportActuatorPosition: string;
+  exportActuatorVelocity: string;
+  exportActuatorMotor: string;
+  exportDefaultKp: string;
+  exportIncludeMeshes: string;
+  exportIncludeExtended: string;
+  exportIncludeExtendedDesc: string;
+  exportIncludeBOM: string;
+  exportIncludeBOMDesc: string;
+  exportOutputSection: string;
+  exportOptionsSection: string;
+  exportDoExport: string;
 }
 
 export type Translations = Record<Language, TranslationKeys>;

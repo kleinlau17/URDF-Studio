@@ -7,13 +7,39 @@ import Editor, { loader } from '@monaco-editor/react';
 import { X, Save, Code, Loader2, Maximize, Minimize, AlertCircle, CheckCircle } from 'lucide-react';
 import type { Theme } from '@/types';
 import type { Language } from '@/store';
+import { DraggableWindow } from '@/shared/components';
+import { useDraggableWindow } from '@/shared/hooks';
 
 // Configure Monaco to use local resources instead of CDN
 loader.config({
   paths: {
     vs: '/monaco-editor/min/vs'
-  }
+  },
+  // Force English UI strings for Monaco internals to avoid locale-pack load failures
+  // when we only ship a minimal Monaco asset set.
+  'vs/nls': {
+    availableLanguages: {
+      '*': 'en'
+    }
+  },
 });
+
+type MonacoInstance = Awaited<ReturnType<typeof loader.init>>;
+let monacoPreloadPromise: Promise<MonacoInstance | null> | null = null;
+
+export const preloadSourceCodeEditor = (): Promise<MonacoInstance | null> => {
+  if (!monacoPreloadPromise) {
+    monacoPreloadPromise = loader.init().catch((error) => {
+      if (error?.type !== 'cancelation') {
+        console.error('Monaco preload failed:', error);
+      }
+      monacoPreloadPromise = null;
+      return null;
+    });
+  }
+
+  return monacoPreloadPromise;
+};
 
 export interface SourceCodeEditorProps {
   code: string;
@@ -217,37 +243,37 @@ export const SourceCodeEditor: React.FC<SourceCodeEditorProps> = ({
     }
   }, [code]);
 
-  // Window State
-  const [isMaximized, setIsMaximized] = useState(false);
-  const [rect, setRect] = useState({ x: 100, y: 100, width: 800, height: 600 });
-  const [preMaximizeRect, setPreMaximizeRect] = useState({ x: 100, y: 100, width: 800, height: 600 });
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const editorRef = useRef<any>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [monacoInstance, setMonacoInstance] = useState<any>(null);
+  const [monacoInstance, setMonacoInstance] = useState<MonacoInstance | null>(null);
 
-  // Interaction Refs
-  const dragStartRef = useRef({ x: 0, y: 0, initialRect: { ...rect } });
-  const isDraggingRef = useRef(false);
-  const resizeDirectionRef = useRef('');
+  const windowState = useDraggableWindow({
+    defaultPosition: { x: 100, y: 100 },
+    defaultSize: { width: 800, height: 600 },
+    minSize: { width: MIN_WIDTH, height: MIN_HEIGHT },
+    centerOnMount: false,
+    enableMinimize: false,
+    clampResizeToViewport: false,
+    dragBounds: {
+      allowNegativeX: true,
+      minVisibleWidth: 100,
+      bottomMargin: 50,
+    },
+  });
+  const {
+    isMaximized,
+    size,
+    toggleMaximize,
+  } = windowState;
 
   // Initialize Monaco (avoid unhandled cancellation errors)
   useEffect(() => {
     let isMounted = true;
-    loader
-      .init()
-      .then((monaco) => {
-        if (isMounted) {
-          setMonacoInstance(monaco);
-        }
-      })
-      .catch((error) => {
-        if (error?.type !== 'cancelation') {
-          console.error('Monaco init failed:', error);
-        }
-      });
+    preloadSourceCodeEditor().then((monaco) => {
+      if (isMounted && monaco) {
+        setMonacoInstance(monaco);
+      }
+    });
 
     return () => {
       isMounted = false;
@@ -321,157 +347,6 @@ export const SourceCodeEditor: React.FC<SourceCodeEditorProps> = ({
     }
   }, [monacoInstance, validationErrors]);
 
-  // Handle Dragging
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (isMaximized) return; // Ignore drag if maximized
-    if ((e.target as HTMLElement).closest('button')) return; // Ignore buttons
-
-    e.preventDefault();
-    isDraggingRef.current = true;
-    dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      initialRect: { ...rect }
-    };
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-      const dx = e.clientX - dragStartRef.current.x;
-      const dy = e.clientY - dragStartRef.current.y;
-
-      let newX = dragStartRef.current.initialRect.x + dx;
-      let newY = dragStartRef.current.initialRect.y + dy;
-
-      // Constrain to viewport bounds - all four sides
-      const { width } = dragStartRef.current.initialRect;
-      const minVisible = 100; // Keep at least 100px visible on each side
-      const minX = -width + minVisible;
-      const maxX = window.innerWidth - minVisible;
-      const minY = 0;
-      const maxY = window.innerHeight - 50;
-      newX = Math.max(minX, Math.min(maxX, newX));
-      newY = Math.max(minY, Math.min(maxY, newY));
-
-      if (containerRef.current) {
-        containerRef.current.style.transform = `translate(${newX}px, ${newY}px)`;
-      }
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      if (isDraggingRef.current) {
-        const dx = e.clientX - dragStartRef.current.x;
-        const dy = e.clientY - dragStartRef.current.y;
-
-        let newX = dragStartRef.current.initialRect.x + dx;
-        let newY = dragStartRef.current.initialRect.y + dy;
-
-        // Constrain to viewport bounds - all four sides
-        const { width } = dragStartRef.current.initialRect;
-        const minVisible = 100;
-        const minX = -width + minVisible;
-        const maxX = window.innerWidth - minVisible;
-        const minY = 0;
-        const maxY = window.innerHeight - 50;
-        newX = Math.max(minX, Math.min(maxX, newX));
-        newY = Math.max(minY, Math.min(maxY, newY));
-
-        setRect(prev => ({
-          ...prev,
-          x: newX,
-          y: newY
-        }));
-      }
-      isDraggingRef.current = false;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [rect, isMaximized]);
-
-  // Handle Resizing - supports 'e' (east/right), 's' (south/bottom), 'se' (corner)
-  const handleResizeStart = useCallback((direction: string) => (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    resizeDirectionRef.current = direction;
-    dragStartRef.current = {
-      x: e.clientX,
-      y: e.clientY,
-      initialRect: { ...rect }
-    };
-
-    // Set cursor based on direction
-    const cursorMap: Record<string, string> = { e: 'ew-resize', s: 'ns-resize', se: 'nwse-resize' };
-    const cursor = cursorMap[direction] || 'nwse-resize';
-
-    // Add overlay to prevent iframe interaction
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;z-index:9999;cursor:${cursor};`;
-    document.body.appendChild(overlay);
-
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!resizeDirectionRef.current || !containerRef.current) return;
-      const dx = e.clientX - dragStartRef.current.x;
-      const dy = e.clientY - dragStartRef.current.y;
-      const { width, height } = dragStartRef.current.initialRect;
-      const dir = resizeDirectionRef.current;
-
-      // Calculate new dimensions based on direction
-      const newWidth = dir.includes('e') ? Math.max(MIN_WIDTH, width + dx) : width;
-      const newHeight = dir.includes('s') ? Math.max(MIN_HEIGHT, height + dy) : height;
-
-      containerRef.current.style.width = `${newWidth}px`;
-      containerRef.current.style.height = `${newHeight}px`;
-
-      // Request layout update for smooth resizing
-      requestAnimationFrame(() => editorRef.current?.layout());
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      if (resizeDirectionRef.current) {
-        const dx = e.clientX - dragStartRef.current.x;
-        const dy = e.clientY - dragStartRef.current.y;
-        const { width, height } = dragStartRef.current.initialRect;
-        const dir = resizeDirectionRef.current;
-
-        setRect(prev => ({
-          ...prev,
-          width: dir.includes('e') ? Math.max(MIN_WIDTH, width + dx) : prev.width,
-          height: dir.includes('s') ? Math.max(MIN_HEIGHT, height + dy) : prev.height
-        }));
-      }
-      resizeDirectionRef.current = '';
-      document.body.removeChild(overlay);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      // Final layout update
-      setTimeout(() => editorRef.current?.layout(), 50);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [rect]);
-
-  const toggleMaximize = () => {
-    if (isMaximized) {
-      setRect(preMaximizeRect);
-      // Restore style
-      if (containerRef.current) {
-        containerRef.current.style.width = `${preMaximizeRect.width}px`;
-        containerRef.current.style.height = `${preMaximizeRect.height}px`;
-        containerRef.current.style.transform = `translate(${preMaximizeRect.x}px, ${preMaximizeRect.y}px)`;
-        containerRef.current.style.top = '0';
-        containerRef.current.style.left = '0';
-      }
-    } else {
-      setPreMaximizeRect(rect);
-    }
-    setIsMaximized(!isMaximized);
-    // Layout update after transition
-    setTimeout(() => editorRef.current?.layout(), 100);
-  };
-
   const handleApply = useCallback(() => {
     if (editorRef.current) {
       const value = editorRef.current.getValue();
@@ -510,72 +385,74 @@ export const SourceCodeEditor: React.FC<SourceCodeEditorProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isDirty, handleApply]);
 
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      editorRef.current?.layout();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [isMaximized, size.height, size.width]);
+
   return (
-    <div
-      ref={containerRef}
-      className={`fixed z-50 flex flex-col bg-white dark:bg-panel-bg rounded-lg shadow-2xl border border-slate-300 dark:border-border-black overflow-hidden ${isMaximized ? 'inset-0 !transform-none !w-full !h-full rounded-none' : ''}`}
-      style={!isMaximized ? {
-        width: rect.width,
-        height: rect.height,
-        transform: `translate(${rect.x}px, ${rect.y}px)`,
-        top: 0,
-        left: 0,
-      } : undefined}
-    >
-      {/* Header */}
-      <div
-        className={`h-10 bg-slate-100 dark:bg-element-active border-b border-slate-200 dark:border-border-black flex items-center justify-between px-3 select-none ${isMaximized ? '' : 'cursor-move'}`}
-        onMouseDown={handleMouseDown}
-        onDoubleClick={toggleMaximize}
-      >
-        <div className="flex items-center gap-2.5">
+    <DraggableWindow
+      window={windowState}
+      onClose={onClose}
+      title={
+        <>
           <div className="flex items-center gap-1.5 opacity-80">
-            <Code className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span className="font-semibold text-xs text-slate-700 dark:text-slate-200 font-mono tracking-tight">{fileName}</span>
+            <Code className="w-4 h-4 text-system-blue" />
+            <span className="font-semibold text-xs text-text-primary font-mono tracking-tight">{fileName}</span>
           </div>
           {isDirty && (
             <span className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-[9px] font-bold text-amber-600 dark:text-amber-400 rounded uppercase tracking-wider">
               {t.modified}
             </span>
           )}
-        </div>
-        <div className="flex items-center gap-1" onMouseDown={e => e.stopPropagation()}>
-          <button
-            onClick={handleApply}
-            disabled={!isDirty}
-            className={`flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wide rounded transition-all mr-2 ${isDirty
-              ? 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm'
-              : 'text-slate-400 bg-transparent cursor-not-allowed'
-            }`}
-            title={t.saveTooltip}
-          >
-            <Save className="w-3 h-3" />
-            <span>{t.save}</span>
-          </button>
-
-          <button
-            onClick={toggleMaximize}
-            className="p-1.5 hover:bg-slate-200 dark:hover:bg-element-hover rounded-md transition-colors"
-            title={isMaximized ? t.restore : t.maximize}
-          >
-            {isMaximized ? <Minimize className="w-3.5 h-3.5 text-slate-500" /> : <Maximize className="w-3.5 h-3.5 text-slate-500" />}
-          </button>
-
-          <button
-            onClick={onClose}
-            className="p-1.5 text-slate-500 hover:bg-red-500 hover:text-white dark:text-slate-400 dark:hover:bg-red-600 dark:hover:text-white rounded transition-colors"
-            title={t.close}
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+        </>
+      }
+      headerActions={
+        <button
+          onClick={handleApply}
+          disabled={!isDirty}
+          className={`flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wide rounded transition-all mr-2 ${isDirty
+            ? 'bg-system-blue-solid hover:bg-system-blue-hover text-white shadow-sm'
+            : 'text-text-tertiary bg-transparent cursor-not-allowed'
+          }`}
+          title={t.saveTooltip}
+        >
+          <Save className="w-3 h-3" />
+          <span>{t.save}</span>
+        </button>
+      }
+      className={`fixed z-50 flex flex-col bg-panel-bg text-text-primary rounded-2xl shadow-xl border border-border-black overflow-hidden ${isMaximized ? 'inset-0 !transform-none !w-full !h-full rounded-none' : ''}`}
+      headerClassName="h-10 bg-element-bg border-b border-border-black flex items-center justify-between px-3 select-none"
+      headerLeftClassName="flex items-center gap-2.5"
+      headerDraggableClassName="cursor-move"
+      headerDraggingClassName="cursor-move"
+      showMinimizeButton={false}
+      maximizeTitle={t.maximize}
+      restoreTitle={t.restore}
+      closeTitle={t.close}
+      onHeaderDoubleClick={toggleMaximize}
+      controlButtonClassName="p-1.5 hover:bg-element-hover rounded-md transition-colors"
+      closeButtonClassName="p-1.5 text-text-tertiary hover:bg-red-500 hover:text-white rounded transition-colors"
+      rightResizeHandleClassName="absolute top-10 right-0 w-1.5 bottom-7 cursor-ew-resize z-40 hover:bg-system-blue/30 transition-colors"
+      bottomResizeHandleClassName="absolute bottom-0 left-0 h-1.5 right-0 cursor-ns-resize z-40 hover:bg-system-blue/30 transition-colors"
+      cornerResizeHandleClassName="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-50 hover:bg-system-blue/40 transition-colors"
+      rightResizeDirection="e"
+      bottomResizeDirection="s"
+      cornerResizeDirection="se"
+      controlIcons={{
+        maximize: <Maximize className="w-3.5 h-3.5 text-text-tertiary" />,
+        restore: <Minimize className="w-3.5 h-3.5 text-text-tertiary" />,
+        close: <X className="w-4 h-4" />,
+      }}
+    >
 
       {/* Editor Content */}
       <div className="flex-1 overflow-hidden relative">
         {!isEditorReady && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white dark:bg-panel-bg z-10">
-            <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+          <div className="absolute inset-0 flex items-center justify-center bg-panel-bg z-10">
+            <Loader2 className="w-6 h-6 animate-spin text-system-blue" />
           </div>
         )}
         <Editor
@@ -595,7 +472,8 @@ export const SourceCodeEditor: React.FC<SourceCodeEditorProps> = ({
           options={{
             minimap: { enabled: false },
             fontSize: 13,
-            fontFamily: "'JetBrains Mono', 'Fira Code', Consolas, monospace",
+            fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace",
+            fontLigatures: true,
             scrollBeyondLastLine: false,
             wordWrap: 'on',
             automaticLayout: false, // Performance optimization
@@ -610,7 +488,7 @@ export const SourceCodeEditor: React.FC<SourceCodeEditorProps> = ({
       </div>
 
       {/* Status Bar */}
-      <div className="h-7 bg-slate-50 dark:bg-element-active border-t border-slate-200 dark:border-border-black flex items-center px-3 justify-between shrink-0 text-[10px] select-none">
+      <div className="h-7 bg-element-bg border-t border-border-black flex items-center px-3 justify-between shrink-0 text-[10px] select-none">
         <div className="flex items-center gap-3">
           {validationErrors.length > 0 ? (
             <button
@@ -634,36 +512,16 @@ export const SourceCodeEditor: React.FC<SourceCodeEditorProps> = ({
               <span>{t.noErrors}</span>
             </div>
           )}
-          <div className="w-px h-3 bg-slate-300 dark:bg-slate-600" />
-          <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+          <div className="w-px h-3 bg-border-black" />
+          <div className="flex items-center gap-1.5 text-text-secondary">
             <span>URDF/XML</span>
           </div>
         </div>
-        <div className="text-slate-400 dark:text-slate-500 font-mono">
-          {isMaximized ? t.maximized : `${Math.round(rect.width)} × ${Math.round(rect.height)}`}
+        <div className="text-text-tertiary font-mono">
+          {isMaximized ? t.maximized : `${Math.round(size.width)} × ${Math.round(size.height)}`}
         </div>
       </div>
 
-      {/* Resize Handles (Only when not maximized) */}
-      {!isMaximized && (
-        <>
-          {/* Right edge */}
-          <div
-            className="absolute top-10 right-0 w-1.5 bottom-7 cursor-ew-resize z-40 hover:bg-blue-500/30 transition-colors"
-            onMouseDown={handleResizeStart('e')}
-          />
-          {/* Bottom edge */}
-          <div
-            className="absolute bottom-0 left-0 h-1.5 right-0 cursor-ns-resize z-40 hover:bg-blue-500/30 transition-colors"
-            onMouseDown={handleResizeStart('s')}
-          />
-          {/* Bottom-right corner */}
-          <div
-            className="absolute bottom-0 right-0 w-4 h-4 cursor-nwse-resize z-50 hover:bg-blue-500/40 transition-colors"
-            onMouseDown={handleResizeStart('se')}
-          />
-        </>
-      )}
-    </div>
+    </DraggableWindow>
   );
 };

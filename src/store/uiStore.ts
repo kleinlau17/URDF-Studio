@@ -25,8 +25,6 @@ export interface ViewOptions {
   showInertia: boolean;
   showCenterOfMass: boolean;
   showCollision: boolean;
-  showFPS: boolean;
-  showMemory: boolean;
 }
 
 // Panel visibility state
@@ -66,6 +64,10 @@ interface UIState {
   viewOptions: ViewOptions;
   setViewOption: <K extends keyof ViewOptions>(key: K, value: ViewOptions[K]) => void;
 
+  // Ground plane offset (Z position)
+  groundPlaneOffset: number;
+  setGroundPlaneOffset: (offset: number) => void;
+
   // Panel visibility
   panels: PanelsState;
   togglePanel: (panel: keyof PanelsState) => void;
@@ -76,6 +78,10 @@ interface UIState {
   toggleSidebar: (side: 'left' | 'right') => void;
   setSidebar: (side: 'left' | 'right', collapsed: boolean) => void;
 
+  // Sidebar Tab (structure/workspace)
+  sidebarTab: 'structure' | 'workspace';
+  setSidebarTab: (tab: 'structure' | 'workspace') => void;
+
   // Settings modal
   isSettingsOpen: boolean;
   settingsPos: { x: number; y: number };
@@ -84,8 +90,8 @@ interface UIState {
   setSettingsPos: (pos: { x: number; y: number }) => void;
 
   // Menu state
-  activeMenu: 'file' | 'toolbox' | 'view' | 'more' | null;
-  setActiveMenu: (menu: 'file' | 'toolbox' | 'view' | 'more' | null) => void;
+  activeMenu: 'file' | 'edit' | 'toolbox' | 'view' | 'more' | null;
+  setActiveMenu: (menu: 'file' | 'edit' | 'toolbox' | 'view' | 'more' | null) => void;
 
   // OS detection
   os: 'mac' | 'win';
@@ -119,8 +125,6 @@ const defaultViewOptions: ViewOptions = {
   showInertia: false,
   showCenterOfMass: false,
   showCollision: false,
-  showFPS: false,
-  showMemory: false,
 };
 
 const defaultPanels: PanelsState = {
@@ -189,6 +193,20 @@ const getSavedUiScale = (): number => {
   return 1.0;
 };
 
+// Helper to apply font size (affects text size via CSS variable)
+const applyFontSize = (fontSize: 'small' | 'medium' | 'large') => {
+  if (typeof window === 'undefined') return;
+  let scale: number;
+  switch (fontSize) {
+    case 'small': scale = 0.85; break;  // 85%
+    case 'large': scale = 1.25; break;  // 125%
+    case 'medium':
+    default: scale = 1.0; break;  // 100%
+  }
+  document.documentElement.style.setProperty('--font-scale', scale.toString());
+  document.documentElement.setAttribute('data-font-size', fontSize);
+};
+
 // Helper to apply theme
 const applyTheme = (theme: Theme) => {
   if (typeof window === 'undefined') return;
@@ -249,6 +267,10 @@ export const useUIStore = create<UIState>()(
           viewOptions: { ...state.viewOptions, [key]: value },
         })),
 
+      // Ground plane offset
+      groundPlaneOffset: 0,
+      setGroundPlaneOffset: (offset) => set({ groundPlaneOffset: offset }),
+
       // Panels
       panels: defaultPanels,
       togglePanel: (panel) =>
@@ -286,6 +308,10 @@ export const useUIStore = create<UIState>()(
             sidebar: { ...state.sidebar, [key]: collapsed },
           };
         }),
+
+      // Sidebar Tab
+      sidebarTab: 'structure',
+      setSidebarTab: (tab) => set({ sidebarTab: tab }),
 
       // Settings modal
       isSettingsOpen: false,
@@ -333,7 +359,10 @@ export const useUIStore = create<UIState>()(
 
       // Font Size
       fontSize: 'medium',
-      setFontSize: (size) => set({ fontSize: size }),
+      setFontSize: (size) => {
+        applyFontSize(size);
+        set({ fontSize: size });
+      },
     }),
     {
       name: 'urdf-studio-ui',
@@ -347,9 +376,15 @@ export const useUIStore = create<UIState>()(
         fontSize: state.fontSize,
       }),
       onRehydrateStorage: () => (state) => {
-        // Re-apply theme on hydration
+        // Re-apply theme, UI scale and font size on hydration
         if (state) {
           applyTheme(state.theme);
+          // Re-apply UI scale
+          if (state.uiScale) {
+            document.documentElement.style.fontSize = `${state.uiScale * 100}%`;
+          }
+          // Re-apply font size
+          applyFontSize(state.fontSize || 'medium');
         }
       },
     }

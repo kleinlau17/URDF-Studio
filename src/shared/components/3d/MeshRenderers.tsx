@@ -3,7 +3,7 @@
  * Used by both Visualizer.tsx and URDFViewer.tsx
  */
 
-import React, { useMemo } from 'react';
+import React, { useLayoutEffect, useEffect, useMemo } from 'react';
 import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 // @ts-ignore
@@ -56,6 +56,7 @@ export const STLRenderer = React.memo(({
 }) => {
   const geometry = useLoader(STLLoader, url);
   const clone = useMemo(() => geometry.clone(), [geometry]);
+  useEffect(() => () => { clone.dispose(); }, [clone]);
   const scaleArr: [number, number, number] = scale ? [scale.x, scale.y, scale.z] : [1, 1, 1];
   return <mesh geometry={clone} material={material} rotation={[0, 0, 0]} scale={scaleArr} />;
 });
@@ -78,19 +79,36 @@ export const OBJRenderer = React.memo(({
   const obj = useLoader(OBJLoader, url, (loader) => {
     loader.manager = manager;
   });
-  const clone = useMemo(() => {
+  const { clone, overrideMeshes } = useMemo(() => {
     const c = obj.clone();
+    const meshes: THREE.Mesh[] = [];
     c.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
         const mat = mesh.material as THREE.MeshStandardMaterial;
         if (!mat || !mat.map) {
-          mesh.material = material;
+          meshes.push(mesh);
         }
       }
     });
-    return c;
-  }, [obj, material]);
+    return { clone: c, overrideMeshes: meshes };
+  }, [obj]);
+
+  useLayoutEffect(() => {
+    overrideMeshes.forEach((mesh) => {
+      mesh.material = material;
+    });
+  }, [overrideMeshes, material]);
+
+  useEffect(() => () => {
+    clone.traverse((child: any) => {
+      if (child.material && child.material !== material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((m: THREE.Material) => m.dispose());
+      }
+    });
+  }, [clone, material]);
+
   const scaleArr: [number, number, number] = scale ? [scale.x, scale.y, scale.z] : [1, 1, 1];
   return <group rotation={[0, 0, 0]} scale={scaleArr}><primitive object={clone} /></group>;
 });
@@ -111,8 +129,9 @@ export const DAERenderer = React.memo(({
   const dae = useLoader(ColladaLoader, url, (loader) => {
     loader.manager = manager;
   });
-  const clone = useMemo(() => {
+  const { clone, overrideMeshes } = useMemo(() => {
     const c = dae.scene.clone();
+    const meshes: THREE.Mesh[] = [];
     c.rotation.set(0, 0, 0);
     c.updateMatrix();
 
@@ -130,12 +149,28 @@ export const DAERenderer = React.memo(({
         }
 
         if (!hasTexture) {
-          mesh.material = material;
+          meshes.push(mesh);
         }
       }
     });
-    return c;
-  }, [dae, material]);
+    return { clone: c, overrideMeshes: meshes };
+  }, [dae]);
+
+  useLayoutEffect(() => {
+    overrideMeshes.forEach((mesh) => {
+      mesh.material = material;
+    });
+  }, [overrideMeshes, material]);
+
+  useEffect(() => () => {
+    clone.traverse((child: any) => {
+      if (child.material && child.material !== material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((m: THREE.Material) => m.dispose());
+      }
+    });
+  }, [clone, material]);
+
   const scaleArr: [number, number, number] = scale ? [scale.x, scale.y, scale.z] : [1, 1, 1];
   return <group scale={scaleArr}><primitive object={clone} /></group>;
 });

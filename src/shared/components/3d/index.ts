@@ -14,7 +14,9 @@ export {
 // Scene Utilities
 export {
   HoverInvalidator,
+  CanvasResizeSync,
   SnapshotManager,
+  NeutralStudioEnvironment,
   SceneLighting,
   ReferenceGrid,
   LIGHTING_CONFIG
@@ -23,5 +25,4 @@ export {
 // Visualization Helpers
 export * from './helpers';
 
-// Performance
-export { PerformanceMonitor } from './PerformanceMonitor';
+export { UsageGuide } from './UsageGuide';

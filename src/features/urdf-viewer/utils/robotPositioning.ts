@@ -1,61 +1,28 @@
 import * as THREE from 'three';
+import { getLowestMeshZ } from '@/shared/utils';
 
 /**
- * Offset the robot so its bottom is at ground level (Y=0)
- * Also handles Z-up URDF convention by offsetting negative Z parts
+ * Align the rendered robot so its lowest visible visual geometry rests on Z=0.
+ * This keeps the grid/canvas stable while switching assets with different
+ * authoring origins, reducing visible scene "jumps" during preview updates.
  */
 export function offsetRobotToGround(robot: THREE.Object3D): void {
-    // Update matrix world to ensure correct bounds calculation for detached object
-    robot.updateMatrixWorld(true);
-
-    const box = new THREE.Box3();
-
-    robot.traverse((child) => {
-        // Ignore gizmos and helpers
-        if (child.userData?.isGizmo) return;
-
-        // Ignore specific helper names that might not be tagged
-        if (child.name === '__link_axes_helper__' ||
-            child.name === '__joint_axis_helper__' ||
-            child.name === '__debug_joint_axes__' ||
-            child.name === '__inertia_visual__' ||
-            child.name === '__com_visual__' ||
-            child.name === '__inertia_box__' ||
-            child.name === '__origin_axes__' ||
-            child.name === '__joint_axis__') return;
-
-        if ((child as THREE.Mesh).isMesh) {
-            const mesh = child as THREE.Mesh;
-            if (mesh.geometry) {
-                if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
-                const geomBox = mesh.geometry.boundingBox!.clone();
-                geomBox.applyMatrix4(mesh.matrixWorld);
-                box.union(geomBox);
-            }
-        }
+    // Prefer visible visual geometry so collision meshes never affect grounding.
+    let minZ = getLowestMeshZ(robot, {
+        includeInvisible: false,
+        includeVisual: true,
+        includeCollision: false,
     });
-
-    // Fallback if box is empty (e.g. only gizmos found or no meshes)
-    if (box.isEmpty()) {
-        const standardBox = new THREE.Box3().setFromObject(robot);
-        if (!standardBox.isEmpty()) {
-             box.copy(standardBox);
-        } else {
-             return;
-        }
+    if (minZ === null) {
+        // Fallback for edge cases where visibility is temporarily not initialized.
+        minZ = getLowestMeshZ(robot, {
+            includeInvisible: true,
+            includeVisual: true,
+            includeCollision: false,
+        });
     }
-
-    const minY = box.min.y;
-    const minZ = box.min.z;
-
-    // Offset Y so bottom is at Y=0 (ground plane in Three.js Y-up convention)
-    if (isFinite(minY) && Math.abs(minY) > 0.0001) {
-        robot.position.y -= minY;
-    }
-
-    // Also offset Z if there are negative Z parts (for Z-up URDF convention)
-    // This ensures the robot is fully above the XY plane
-    if (isFinite(minZ) && minZ < -0.0001) {
+    if (minZ !== null) {
         robot.position.z -= minZ;
+        robot.updateMatrixWorld(true);
     }
 }

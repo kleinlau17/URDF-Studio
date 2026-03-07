@@ -28,7 +28,7 @@ interface CommonVisualizerProps {
   showHardwareLabels: boolean;
   showInertia: boolean;
   showCenterOfMass: boolean;
-  transformMode: 'translate' | 'rotate';
+  transformMode: 'translate' | 'rotate' | 'select';
   assets: Record<string, string>;
   lang: Language;
   onRegisterJointPivot?: (jointId: string, pivot: THREE.Group | null) => void;
@@ -96,6 +96,7 @@ export const JointNode = memo(function JointNode({
   const [jointPivot, setJointPivot] = useState<THREE.Group | null>(null);
   // Joint group: contains visualization, positioned at [0,0,0] relative to pivot
   const [jointGroup, setJointGroup] = useState<THREE.Group | null>(null);
+  const [isHovered, setIsHovered] = useState(false);
 
   // Register pivot with parent Visualizer component
   useEffect(() => {
@@ -111,10 +112,10 @@ export const JointNode = memo(function JointNode({
 
   return (
     <group>
-      {mode === 'skeleton' && showGeometry && (
+      {/* Connecting line: dashed for skeleton geometry, solid thin for labels */}
+      {(Math.abs(x) > 0.001 || Math.abs(y) > 0.001 || Math.abs(z) > 0.001) && (
         <>
-          {/* Only render line if distance is significant (> 0.001m) to avoid rendering glitches */}
-          {(Math.abs(x) > 0.001 || Math.abs(y) > 0.001 || Math.abs(z) > 0.001) && (
+          {mode === 'skeleton' && showGeometry && (
             <Line
               points={[[0, 0, 0], [x, y, z]]}
               color={isSelected ? "#fbbf24" : "#94a3b8"}
@@ -122,6 +123,13 @@ export const JointNode = memo(function JointNode({
               dashed
               dashSize={0.02}
               gapSize={0.01}
+            />
+          )}
+          {showJointLabel && !(mode === 'skeleton' && showGeometry) && (
+            <Line
+              points={[[0, 0, 0], [x, y, z]]}
+              color={isSelected ? "#fbbf24" : "#64748b"}
+              lineWidth={1}
             />
           )}
         </>
@@ -141,47 +149,60 @@ export const JointNode = memo(function JointNode({
                 rotation={[0, 0, 0]}
             >
                 {showAxes && (
-                    <ThickerAxes
-                        size={frameSize}
-                        onClick={(mode === 'skeleton' || mode === 'hardware') ? (e) => {
-                            e.stopPropagation();
-                            onSelect('joint', joint.id);
-                        } : undefined}
-                    />
+                    <group userData={{ isHelper: true }}>
+                        <ThickerAxes
+                            size={frameSize}
+                            onClick={(mode === 'skeleton' || mode === 'hardware') ? (e) => {
+                                e.stopPropagation();
+                                onSelect('joint', joint.id);
+                            } : undefined}
+                        />
+                    </group>
                 )}
 
           {(mode === 'skeleton' || mode === 'hardware') && (
             <group>
               {showJointLabel && (
-                <Html position={[0.25, 0, 0]} className="pointer-events-none">
+                <Html center position={[0, 0, 0]} distanceFactor={1.5} className="pointer-events-none" zIndexRange={[0, 0]}>
                   <div
-                    style={{ transform: `scale(${labelScale})`, transformOrigin: 'left center' }}
+                    style={{ transform: `scale(${labelScale})`, transformOrigin: 'center center' }}
+                    className="pointer-events-auto cursor-pointer select-none"
+                    onMouseEnter={() => setIsHovered(true)}
+                    onMouseLeave={() => setIsHovered(false)}
                     onClick={(e) => {
                       e.stopPropagation();
                       onSelect('joint', joint.id);
                     }}
-                    className={`
-                                        px-1.5 py-0.5 text-[10px] font-mono rounded border whitespace-nowrap shadow-xl
-                                        pointer-events-auto cursor-pointer select-none transition-colors
-                                        ${isSelected
-                        ? 'bg-blue-600 text-white border-blue-400 z-50'
-                        : 'bg-white/90 dark:bg-[#1C1C1E] text-orange-700 dark:text-orange-200 border-orange-200 dark:border-[#000000] hover:bg-orange-50 dark:hover:bg-[#3A3A3C]'
-                      }
-                                    `}
                   >
-                    {joint.name}
+                    {(isSelected || isHovered) ? (
+                      <div
+                        className={`
+                          px-1 py-px text-[8px] font-mono rounded border whitespace-nowrap shadow-xl transition-colors
+                          ${isSelected
+                            ? 'bg-blue-600 text-white border-blue-400 z-50'
+                            : 'bg-white/90 dark:bg-[#1C1C1E] text-orange-700 dark:text-orange-200 border-orange-200 dark:border-[#000000] hover:bg-orange-50 dark:hover:bg-[#3A3A3C]'
+                          }
+                        `}
+                      >
+                        {joint.name}
+                      </div>
+                    ) : (
+                      <div className="w-2 h-2 rounded-full bg-orange-400/80 hover:scale-150 transition-transform" />
+                    )}
                   </div>
                 </Html>
               )}
-              {mode === 'skeleton' && showJointAxes && joint.type !== 'fixed' && <JointAxesVisual joint={joint} scale={jointAxisSize / 0.35} />}
+              {mode === 'skeleton' && showJointAxes && joint.type !== 'fixed' && <group userData={{ isHelper: true }}><JointAxesVisual joint={joint} scale={jointAxisSize / 0.35} /></group>}
             </group>
           )}
 
           {mode !== 'skeleton' && (
-            <mesh onClick={(e: any) => { e.stopPropagation(); onSelect('joint', joint.id); }}>
-              <sphereGeometry args={[0.02, 16, 16]} />
-              <meshBasicMaterial color={isSelected ? "orange" : "white"} opacity={isSelected ? 1 : 0} transparent />
-            </mesh>
+            <group userData={{ isHelper: true }}>
+              <mesh onClick={(e: any) => { e.stopPropagation(); onSelect('joint', joint.id); }}>
+                <sphereGeometry args={[0.02, 16, 16]} />
+                <meshBasicMaterial color={isSelected ? "orange" : "white"} opacity={isSelected ? 1 : 0} transparent />
+              </mesh>
+            </group>
           )}
 
           <RobotNode

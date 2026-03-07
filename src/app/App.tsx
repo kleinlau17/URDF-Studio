@@ -2,17 +2,19 @@
  * Main App Component
  * Root component that assembles all pieces together
  */
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { Providers } from './Providers';
 import { AppLayout } from './AppLayout';
 import { SettingsModal } from './components/SettingsModal';
 import { AboutModal } from './components/AboutModal';
 import { AIModal } from '@/features/ai-assistant';
-import { URDFSquare } from '@/features/urdf-square';
+import { URDFGallery } from '@/features/urdf-gallery';
+import { ExportDialog } from '@/features/file-io/components/ExportDialog';
 import { useFileImport, useFileExport } from './hooks';
-import { useRobotStore, useUIStore, useSelectionStore, useAssetsStore } from '@/store';
+import { useRobotStore, useUIStore, useSelectionStore, useAssetsStore, useAssemblyStore } from '@/store';
 import { parseURDF, parseMJCF, parseUSDA, parseXacro } from '@/core/parsers';
 import type { RobotFile, RobotState, UrdfLink, UrdfJoint } from '@/types';
+import { GeometryType } from '@/types';
 import { translations } from '@/shared/i18n';
 
 function AppContent() {
@@ -24,9 +26,12 @@ function AppContent() {
   const lang = useUIStore((state) => state.lang);
   const setAppMode = useUIStore((state) => state.setAppMode);
   const openSettings = useUIStore((state) => state.openSettings);
+  const sidebarTab = useUIStore((state) => state.sidebarTab);
 
   // Selection Store
   const setSelection = useSelectionStore((state) => state.setSelection);
+  const selection = useSelectionStore((state) => state.selection);
+  const focusOn = useSelectionStore((state) => state.focusOn);
 
   // Assets Store
   const setOriginalUrdfContent = useAssetsStore((state) => state.setOriginalUrdfContent);
@@ -43,6 +48,10 @@ function AppContent() {
   const rootLinkId = useRobotStore((state) => state.rootLinkId);
   const setRobot = useRobotStore((state) => state.setRobot);
 
+  // Assembly Store
+  const assemblyState = useAssemblyStore((state) => state.assemblyState);
+  const getMergedRobotData = useAssemblyStore((state) => state.getMergedRobotData);
+
   // Local UI state
   const [toast, setToast] = useState<{ show: boolean; message: string; type: 'info' | 'success' }>({
     show: false, message: '', type: 'info'
@@ -50,7 +59,9 @@ function AppContent() {
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isAIModalOpen, setIsAIModalOpen] = useState(false);
   const [isCodeViewerOpen, setIsCodeViewerOpen] = useState(false);
-  const [isURDFSquareOpen, setIsURDFSquareOpen] = useState(false);
+  const [isURDFGalleryOpen, setIsURDFGalleryOpen] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [viewConfig, setViewConfig] = useState({
     showToolbar: true,
     showOptionsPanel: true,
@@ -58,20 +69,45 @@ function AppContent() {
     showJointPanel: true,
   });
 
-  // Show toast helper
+  // Show toast helper with proper timer cleanup
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showToast = useCallback((message: string, type: 'info' | 'success' = 'info') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToast({ show: true, message, type });
-    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 5000);
+    toastTimerRef.current = setTimeout(() => setToast(prev => ({ ...prev, show: false })), 5000);
   }, []);
+  useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
 
-  // Build robot state for components
-  const robot: RobotState = {
-    name: robotName,
-    links: robotLinks,
-    joints: robotJoints,
+  // Build robot state for AI modal
+  // In workspace mode, AI inspection/select should target merged assembly ids.
+  const robot: RobotState = useMemo(() => {
+    if (assemblyState && sidebarTab === 'workspace') {
+      const mergedRobot = getMergedRobotData();
+      if (mergedRobot) {
+        return {
+          ...mergedRobot,
+          selection,
+        };
+      }
+    }
+
+    return {
+      name: robotName,
+      links: robotLinks,
+      joints: robotJoints,
+      rootLinkId,
+      selection,
+    };
+  }, [
+    robotName,
+    robotLinks,
+    robotJoints,
     rootLinkId,
-    selection: useSelectionStore.getState().selection,
-  };
+    selection,
+    assemblyState,
+    sidebarTab,
+    getMergedRobotData,
+  ]);
 
   // Load robot file handler
   const handleLoadRobot = useCallback((file: RobotFile) => {
@@ -97,6 +133,42 @@ function AppContent() {
         pathParts.pop();
         newState = parseXacro(file.content, {}, fileMap, pathParts.join('/'));
         break;
+      case 'mesh': {
+        const meshName = file.name.split('/').pop()?.replace(/\.[^/.]+$/, '') ?? 'mesh';
+        const linkId = 'base_link';
+        newState = {
+          name: meshName,
+          links: {
+            [linkId]: {
+              id: linkId,
+              name: 'base_link',
+              visible: true,
+              visual: {
+                type: GeometryType.MESH,
+                dimensions: { x: 1, y: 1, z: 1 },
+                color: '#808080',
+                meshPath: file.name,
+                origin: { xyz: { x: 0, y: 0, z: 0 }, rpy: { r: 0, p: 0, y: 0 } },
+              },
+              collision: {
+                type: GeometryType.NONE,
+                dimensions: { x: 0, y: 0, z: 0 },
+                color: '#ef4444',
+                origin: { xyz: { x: 0, y: 0, z: 0 }, rpy: { r: 0, p: 0, y: 0 } },
+              },
+              inertial: {
+                mass: 1.0,
+                origin: { xyz: { x: 0, y: 0, z: 0 }, rpy: { r: 0, p: 0, y: 0 } },
+                inertia: { ixx: 0.1, ixy: 0, ixz: 0, iyy: 0.1, iyz: 0, izz: 0.1 },
+              },
+            },
+          },
+          joints: {},
+          rootLinkId: linkId,
+          selection: { type: null, id: null },
+        };
+        break;
+      }
     }
 
     if (newState) {
@@ -104,8 +176,8 @@ function AppContent() {
       setRobot(data);
       setSelection({ type: null, id: null });
       setSelectedFile(file);
-      setOriginalUrdfContent(file.content);
-      setOriginalFileFormat(file.format);
+      setOriginalUrdfContent(file.format === 'mesh' ? '' : file.content);
+      setOriginalFileFormat(file.format === 'mesh' ? null : file.format);
       setAppMode('detail');
     } else {
       alert(lang === 'zh' ? `解析 ${file.format.toUpperCase()} 失败` : `Failed to parse ${file.format.toUpperCase()}`);
@@ -114,7 +186,7 @@ function AppContent() {
 
   // File import/export hooks
   const { handleImport } = useFileImport({ onLoadRobot: handleLoadRobot, onShowToast: showToast });
-  const { handleExport } = useFileExport();
+  const { handleExportProject, handleExportWithConfig } = useFileExport();
 
   // AI changes handler
   const handleApplyAIChanges = useCallback((data: { name?: string; links?: Record<string, UrdfLink>; joints?: Record<string, UrdfJoint>; rootLinkId?: string }) => {
@@ -140,22 +212,21 @@ function AppContent() {
     };
   }, [handleImport]);
 
-  const t = translations[lang];
-
   return (
     <>
       <AppLayout
         importInputRef={importInputRef}
         importFolderInputRef={importFolderInputRef}
         onFileDrop={(files) => handleImport(files as any)}
-        onExport={handleExport}
+        onOpenExport={() => setIsExportDialogOpen(true)}
+        onExportProject={handleExportProject}
         showToast={showToast}
         onOpenAI={() => setIsAIModalOpen(true)}
         isCodeViewerOpen={isCodeViewerOpen}
         setIsCodeViewerOpen={setIsCodeViewerOpen}
         onOpenSettings={() => openSettings()}
         onOpenAbout={() => setIsAboutOpen(true)}
-        onOpenURDFSquare={() => setIsURDFSquareOpen(true)}
+        onOpenURDFGallery={() => setIsURDFGalleryOpen(true)}
         viewConfig={viewConfig}
         setViewConfig={setViewConfig}
         onLoadRobot={handleLoadRobot}
@@ -171,13 +242,34 @@ function AppContent() {
         motorLibrary={motorLibrary}
         lang={lang}
         onApplyChanges={handleApplyAIChanges}
-        onSelectItem={(type, id) => setSelection({ type, id })}
+        onSelectItem={(type, id) => {
+          setSelection({ type, id });
+          focusOn(id);
+        }}
       />
 
-      {/* URDF Square */}
-      {isURDFSquareOpen && (
-        <URDFSquare
-          onClose={() => setIsURDFSquareOpen(false)}
+      {/* Export Dialog */}
+      {isExportDialogOpen && (
+        <ExportDialog
+          onClose={() => setIsExportDialogOpen(false)}
+          onExport={async (config) => {
+            setIsExporting(true);
+            try {
+              await handleExportWithConfig(config);
+            } finally {
+              setIsExporting(false);
+              setIsExportDialogOpen(false);
+            }
+          }}
+          lang={lang}
+          isExporting={isExporting}
+        />
+      )}
+
+      {/* URDF Gallery */}
+      {isURDFGalleryOpen && (
+        <URDFGallery
+          onClose={() => setIsURDFGalleryOpen(false)}
           lang={lang}
           onImport={(e) => handleImport(e.target.files)}
         />

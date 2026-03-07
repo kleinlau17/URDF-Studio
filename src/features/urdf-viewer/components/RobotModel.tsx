@@ -4,6 +4,7 @@ import { Html } from '@react-three/drei';
 import { CollisionTransformControls } from './CollisionTransformControls';
 import { translations } from '@/shared/i18n';
 import type { RobotModelProps } from '../types';
+import { isSingleDofJoint } from '../utils/jointTypes';
 
 // Import hooks
 import {
@@ -23,6 +24,7 @@ export const RobotModel: React.FC<RobotModelProps> = memo(({
     showCollision = false,
     showVisual = true,
     onSelect,
+    onMeshSelect,
     onJointChange,
     onJointChangeCommit,
     jointAngles,
@@ -51,7 +53,9 @@ export const RobotModel: React.FC<RobotModelProps> = memo(({
     toolMode = 'select',
     onCollisionTransformEnd,
     isOrbitDragging,
-    onTransformPending
+    onTransformPending,
+    isSelectionLockedRef,
+    isMeshPreview = false
 }) => {
     const { invalidate } = useThree();
 
@@ -74,6 +78,8 @@ export const RobotModel: React.FC<RobotModelProps> = memo(({
         assets,
         showCollision,
         showVisual,
+        isMeshPreview,
+        robotLinks,
         onRobotLoaded
     });
 
@@ -119,12 +125,14 @@ export const RobotModel: React.FC<RobotModelProps> = memo(({
         showCollision,
         showVisual,
         onSelect,
+        onMeshSelect,
         onJointChange,
         onJointChangeCommit,
         setIsDragging,
         setActiveJoint,
         justSelectedRef,
         isOrbitDragging,
+        isSelectionLockedRef,
         highlightGeometry
     });
 
@@ -146,6 +154,7 @@ export const RobotModel: React.FC<RobotModelProps> = memo(({
         needsRaycastRef,
         isOrbitDragging,
         justSelectedRef,
+        isSelectionLockedRef,
         rayIntersectsBoundingBox,
         highlightGeometry
     });
@@ -189,7 +198,7 @@ export const RobotModel: React.FC<RobotModelProps> = memo(({
 
         Object.entries(jointAngles).forEach(([jointName, angle]) => {
             const joint = joints[jointName];
-            if (joint && typeof joint.setJointValue === 'function') {
+            if (isSingleDofJoint(joint) && typeof joint.setJointValue === 'function') {
                 joint.setJointValue(angle);
             }
         });

@@ -247,7 +247,7 @@ export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ urdfPath, ur
       setStatus('checking');
       try {
         const token = (import.meta as any).env.VITE_API_TOKEN;
-        const res = await fetch('/api/download-model', {
+        const res = await fetch('/api/download-asset', {
           method: 'POST',
           headers: { 
             'Authorization': `Bearer ${token}`,

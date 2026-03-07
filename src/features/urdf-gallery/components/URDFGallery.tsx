@@ -6,7 +6,7 @@ import {
 import { RobotPreview } from './RobotPreview';
 import { DraggableWindow } from '@/shared/components';
 import { translations } from '@/shared/i18n';
-import { URDF_STUDIO_MODELS, URDFStudioModel } from '../data';
+import { URDF_STUDIO_ASSETS, URDFStudioAsset } from '../data';
 import { useDraggableWindow, useEffectiveTheme } from '@/shared/hooks';
 
 interface URDFGalleryProps {
@@ -40,29 +40,29 @@ const getCategoryName = (categoryId: string, t: typeof translations['en']) => {
 };
 
 const RobotThumbnail = ({
-  model,
+  asset,
   theme,
   previewLabel
 }: {
-  model: URDFStudioModel;
+  asset: URDFStudioAsset;
   theme?: 'light' | 'dark';
   previewLabel: string;
 }) => {
-  // Use 3D preview for server-hosted models with urdfPath
-  if (model.urdfPath && !model.urdfPath.startsWith('http')) {
+  // Use 3D preview for server-hosted assets with urdfPath
+  if (asset.urdfPath && !asset.urdfPath.startsWith('http')) {
     return (
       <RobotPreview
-        urdfPath={model.urdfPath}
-        urdfFile={model.urdfFile}
-        modelId={model.id}
-        thumbnail={model.thumbnail}
+        urdfPath={asset.urdfPath}
+        urdfFile={asset.urdfFile}
+        modelId={asset.id}
+        thumbnail={asset.thumbnail}
         theme={theme}
         fallbackLabel={previewLabel}
       />
     );
   }
 
-  // Fallback to placeholder for URL-based models
+  // Fallback to placeholder for URL-based assets
   return (
     <div className="flex flex-col items-center justify-center gap-2 text-text-tertiary w-full h-full">
       <Box className="w-10 h-10 opacity-40" />
@@ -87,8 +87,8 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
   // Compute all available tags
   const allTags = useMemo(() => {
     const tags = new Set<string>();
-    URDF_STUDIO_MODELS.forEach(model => {
-      const currentTags = lang === 'zh' && model.tags_zh ? model.tags_zh : model.tags;
+    URDF_STUDIO_ASSETS.forEach(asset => {
+      const currentTags = lang === 'zh' && asset.tags_zh ? asset.tags_zh : asset.tags;
       currentTags.forEach(t => tags.add(t));
     });
     return Array.from(tags).sort();
@@ -119,20 +119,20 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
 
 
 
-  const handleImportModel = async (model: URDFStudioModel) => {
-    if (!model.urdfPath) return;
+  const handleImportAsset = async (asset: URDFStudioAsset) => {
+    if (!asset.urdfPath) return;
     
     setIsDownloading(true);
     try {
-      // Request backend to download model (e.g. from Baidu Cloud)
+      // Request backend to download asset (e.g. from Baidu Cloud)
       const token = import.meta.env.VITE_API_TOKEN;
-      const response = await fetch('/api/download-model', {
+      const response = await fetch('/api/download-asset', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ urdfPath: model.urdfPath }),
+        body: JSON.stringify({ urdfPath: asset.urdfPath }),
       });
 
       if (!response.ok) {
@@ -147,7 +147,7 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
       const filesData = result.data.files as { path: string, url: string }[];
       
       // Determine root folder name based on urdfPath (e.g. "go2_description")
-      const rootFolderName = model.urdfPath.split('/').filter(Boolean).pop() || model.id;
+      const rootFolderName = asset.urdfPath.split('/').filter(Boolean).pop() || asset.id;
 
       // Download all files in parallel
       const fileObjects = await Promise.all(filesData.map(async (fileInfo) => {
@@ -185,7 +185,7 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
       
     } catch (err: any) {
       setIsDownloading(false);
-      console.error('Failed to import model details:', {
+      console.error('Failed to import asset details:', {
         message: err.message,
         stack: err.stack,
         original: err
@@ -196,25 +196,25 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
     }
   };
 
-  const filteredModels = useMemo(() => {
-    return URDF_STUDIO_MODELS.filter(model => {
+  const filteredAssets = useMemo(() => {
+    return URDF_STUDIO_ASSETS.filter(asset => {
       // 1. Category Filter
-      if (selectedCategory !== 'all' && model.category !== selectedCategory) {
+      if (selectedCategory !== 'all' && asset.category !== selectedCategory) {
         return false;
       }
       
       // 2. Tag Filter (Matches ALL selected tags)
       if (selectedTags.length > 0) {
-        const modelTags = lang === 'zh' && model.tags_zh ? model.tags_zh : model.tags;
-        const hasAllTags = selectedTags.every(tag => modelTags.includes(tag));
+        const assetTags = lang === 'zh' && asset.tags_zh ? asset.tags_zh : asset.tags;
+        const hasAllTags = selectedTags.every(tag => assetTags.includes(tag));
         if (!hasAllTags) return false;
       }
 
       // 3. Search Filter
       const searchLower = searchQuery.toLowerCase();
-      const name = (lang === 'zh' && model.name_zh ? model.name_zh : model.name).toLowerCase();
-      const desc = (lang === 'zh' && model.description_zh ? model.description_zh : model.description).toLowerCase();
-      const tags = (lang === 'zh' && model.tags_zh ? model.tags_zh : model.tags).map(t => t.toLowerCase());
+      const name = (lang === 'zh' && asset.name_zh ? asset.name_zh : asset.name).toLowerCase();
+      const desc = (lang === 'zh' && asset.description_zh ? asset.description_zh : asset.description).toLowerCase();
+      const tags = (lang === 'zh' && asset.tags_zh ? asset.tags_zh : asset.tags).map(t => t.toLowerCase());
 
       const matchesSearch = name.includes(searchLower) || 
                             desc.includes(searchLower) ||
@@ -357,22 +357,22 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
 
                 {/* Grid */}
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
-                  {filteredModels.map(model => (
-                    <div key={model.id} className="group bg-panel-bg rounded-lg border border-border-black hover:border-system-blue overflow-hidden transition-all shadow-sm hover:shadow-lg flex flex-col">
+                  {filteredAssets.map(asset => (
+                    <div key={asset.id} className="group bg-panel-bg rounded-lg border border-border-black hover:border-system-blue overflow-hidden transition-all shadow-sm hover:shadow-lg flex flex-col">
                       {/* Thumbnail Area */}
                       <div className="relative w-full aspect-video overflow-hidden bg-slate-100 dark:bg-black flex items-center justify-center">
-                        <RobotThumbnail model={model} theme={theme}  previewLabel={t.preview}/>
+                        <RobotThumbnail asset={asset} theme={theme}  previewLabel={t.preview}/>
                         
                         <div className="absolute top-2 left-2 flex gap-1">
                           <span className="px-1.5 py-0.5 bg-panel-bg text-text-primary text-[9px] font-semibold rounded uppercase shadow-sm border border-border-black">
-                            {getCategoryName(model.category, t)}
+                            {getCategoryName(asset.category, t)}
                           </span>
                         </div>
                         
                         {/* Action Overlay */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3 pointer-events-none">
                           <button 
-                            onClick={() => handleImportModel(model)}
+                            onClick={() => handleImportAsset(asset)}
                             className="w-full py-1.5 bg-system-blue-solid text-white rounded-md text-xs font-semibold flex items-center justify-center gap-1.5 hover:bg-system-blue-hover transition-colors pointer-events-auto">
                             <Download className="w-3.5 h-3.5" />
                             {t.importNow}
@@ -384,7 +384,7 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
                         <div className="p-3 flex-1 flex flex-col">
                           <div className="flex justify-between items-start mb-1">
                           <h3 className="font-semibold text-sm leading-tight text-text-primary group-hover:text-system-blue transition-colors">
-                            {lang === 'zh' && model.name_zh ? model.name_zh : model.name}
+                            {lang === 'zh' && asset.name_zh ? asset.name_zh : asset.name}
                           </h3>
                           <button className="text-text-tertiary hover:text-rose-500 transition-colors">
                             <Heart className="w-4 h-4" />
@@ -393,15 +393,15 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
                         
                         <div className="flex items-center gap-1 text-[10px] text-text-tertiary mb-2">
                           <User className="w-3 h-3" />
-                          <span>{lang === 'zh' && model.author_zh ? model.author_zh : model.author}</span>
+                          <span>{lang === 'zh' && asset.author_zh ? asset.author_zh : asset.author}</span>
                         </div>
 
                         <p className="text-xs text-text-secondary line-clamp-2 mb-2 flex-1">
-                          {lang === 'zh' && model.description_zh ? model.description_zh : model.description}
+                          {lang === 'zh' && asset.description_zh ? asset.description_zh : asset.description}
                         </p>
 
                         <div className="flex flex-wrap gap-1 mb-2">
-                          {(lang === 'zh' && model.tags_zh ? model.tags_zh : model.tags).slice(0, 3).map((tag, idx) => (
+                          {(lang === 'zh' && asset.tags_zh ? asset.tags_zh : asset.tags).slice(0, 3).map((tag, idx) => (
                             <span key={idx} className="px-1.5 py-0.5 bg-element-bg text-text-secondary text-[9px] rounded-full">
                               #{tag}
                             </span>
@@ -412,16 +412,16 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
                           <div className="flex items-center gap-3">
                             <div className="flex items-center gap-1">
                               <Star className="w-3 h-3" />
-                              <span>{model.stars}</span>
+                              <span>{asset.stars}</span>
                             </div>
                             <div className="flex items-center gap-1">
                               <Download className="w-3 h-3" />
-                              <span>{model.downloads}</span>
+                              <span>{asset.downloads}</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
-                            <span>{model.lastUpdated}</span>
+                            <span>{asset.lastUpdated}</span>
                           </div>
                         </div>
                       </div>
@@ -429,7 +429,7 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
                   ))}
                 </div>
 
-                {filteredModels.length === 0 && (
+                {filteredAssets.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <div className="w-12 h-12 bg-element-bg rounded-full flex items-center justify-center mb-3">
                       <Search className="w-6 h-6 text-text-tertiary" />

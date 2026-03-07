@@ -4,34 +4,13 @@ import bodyParser from 'body-parser';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
+import * as bosService from './bosService.js';
+import * as dbService from './dbService.js';
+import { INITIAL_ASSETS } from './seedData.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const require = createRequire(import.meta.url);
-const { BosClient, Auth } = require('@baiducloud/sdk');
 
-// --- WORKAROUND START ---
-// Workaround for "RangeError: Invalid time value" in @baiducloud/sdk
-// Patch Auth.prototype directly to fix all instances
-if (Auth && Auth.prototype) {
-    console.log('[Backend] Applying global patch to Auth.prototype.getTimestamp');
-    Auth.prototype.getTimestamp = function(timestamp) {
-        let dateObj = timestamp;
-        
-        dateObj = new Date();
-        // Final safety check
-        if (isNaN(dateObj.getTime())) {
-            console.warn('[Backend Warning] Invalid date detected in SDK Auth, using current time fallback');
-            dateObj = new Date();
-        }
-
-        // BOS requires ISO 8601 format: yyyy-mm-ddThh:mm:ssZ (no milliseconds)
-        const iso = dateObj.toISOString().replace(/\.\d{3}/g, '');
-        return iso;
-    };
-}
-// --- WORKAROUND END ---
 
 // Load environment variables from specific path (root directory)
 dotenv.config({ path: path.join(__dirname, '../.env') });
@@ -40,15 +19,32 @@ const app = express();
 const port = 3001;
 const API_TOKEN = process.env.VITE_API_TOKEN;
 
-// Initialize BOS Client
-const bosConfig = {
-    endpoint: process.env.BOS_ENDPOINT, 
-    credentials: {
-        ak: process.env.BOS_AK,
-        sk: process.env.BOS_SK
+// Initialize Services
+const initializeServices = async () => {
+    // BOS Service
+    try {
+        bosService.init({
+            endpoint: process.env.BOS_ENDPOINT, 
+            ak: process.env.BOS_AK,
+            sk: process.env.BOS_SK,
+            bucket: process.env.BOS_BUCKET
+        });
+    } catch (error) {
+        console.error('[Backend] Failed to initialize BOS Service:', error.message);
+    }
+    
+    // DB Service (SQLite via Prisma)
+    try {
+        await dbService.connect();
+        await dbService.seedData(INITIAL_ASSETS);
+        // Note: With Prisma + SQLite, connection is file-based.
+        // Data will be stored in prisma/dev.db by default.
+    } catch (error) {
+        console.error('[Backend] Failed to initialize DB Service:', error.message);
     }
 };
-const client = new BosClient(bosConfig);
+
+initializeServices();
 
 // Enable CORS for frontend
 app.use(cors());
@@ -71,8 +67,8 @@ const authenticateToken = (req, res, next) => {
   next();
 };
 
-// Endpoint to handle model download
-app.post('/api/download-model', authenticateToken, async (req, res) => {
+// Endpoint to handle asset download
+app.post('/api/download-asset', authenticateToken, async (req, res) => {
   const { urdfPath } = req.body;
 
   if (!urdfPath) {
@@ -80,49 +76,7 @@ app.post('/api/download-model', authenticateToken, async (req, res) => {
   }
 
   try {
-      const bucketName = process.env.BOS_BUCKET;
-      // Normalize urdfPath to remove leading slash
-      const prefix = urdfPath.startsWith('/') ? urdfPath.slice(1) : urdfPath;
-      
-      // Ensure prefix ends with / to list all files in directory
-      const dirPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`;
-
-      console.log(`[Backend] Listing objects for prefix: ${dirPrefix}`);
-
-      // List all objects under the prefix
-      const response = await client.listObjects(bucketName, { prefix: dirPrefix });
-      
-      if (!response.body || !response.body.contents) {
-          return res.json({ 
-              success: true, 
-              message: 'No files found', 
-              data: { files: [] } 
-          });
-      }
-
-      // Map to relative paths and generate presigned URLs
-      const files = response.body.contents
-        .map(item => {
-            // Remove prefix to get relative path
-            const relativePath = item.key.slice(dirPrefix.length);
-            
-            // Skip directory markers or empty names
-            if (!relativePath) return null;
-
-            // Use 1800s (30min) expiration to match server.js and avoid potential SDK timestamp issues with patch
-            const downloadUrl = client.generatePresignedUrl(bucketName, item.key, {
-                expirationInSeconds: 1800
-            });
-
-            return {
-                path: relativePath,
-                url: downloadUrl
-            };
-        })
-        .filter(item => item !== null);
-
-      console.log(`[Backend] Found ${files.length} files`);
-      // console.log('[Backend] Generated files list:', JSON.stringify(files, null, 2));
+      const files = await bosService.listFiles(urdfPath);
 
       res.json({  
           success: true, 
@@ -146,16 +100,7 @@ app.post('/api/get-signed-url', authenticateToken, async (req, res) => {
   }
 
   try {
-      const bucketName = process.env.BOS_BUCKET;
-      // Normalize filePath to remove leading slash
-      const key = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-
-    //   console.log(`[Backend] Generating signed URL for single file: ${key}`);
-
-      // Use 1800s (30min) expiration
-      const downloadUrl = client.generatePresignedUrl(bucketName, key, {
-          expirationInSeconds: 1800
-      });
+      const downloadUrl = await bosService.getSignedUrl(filePath);
 
       res.json({ 
           success: true, 
@@ -170,7 +115,7 @@ app.post('/api/get-signed-url', authenticateToken, async (req, res) => {
   }
 });
 
-// Endpoint to upload a file (Server-side proxy to avoid CORS problems)
+// Endpoint to avoid CORS problems)
 app.post('/api/upload-file', authenticateToken, async (req, res) => {
   const { filePath, content, secret } = req.body;
 
@@ -179,28 +124,13 @@ app.post('/api/upload-file', authenticateToken, async (req, res) => {
   }
 
   // Security: Require Upload Secret
-  // This ensures that only users (or environments) that possess the SECRET can upload,
-  // preventing public users (who only have the Token) from overwriting files.
   if (secret !== process.env.UPLOAD_SECRET) {
       console.warn(`[Backend Security] Upload attempt with invalid secret`);
       return res.status(403).json({ success: false, message: 'Invalid upload secret' });
   }
 
   try {
-      const bucketName = process.env.BOS_BUCKET;
-      // Normalize filePath to remove leading slash
-      const key = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-
-      console.log(`[Backend] Uploading file to BOS: ${key}`);
-
-      // Extract raw base64 data
-      const base64Data = content.replace(/^data:image\/\w+;base64,/, '');
-      const buffer = Buffer.from(base64Data, 'base64');
-      
-      // Upload to BOS
-      await client.putObject(bucketName, key, buffer, {
-          'Content-Type': 'image/png'
-      });
+      await bosService.uploadFile(filePath, content);
 
       res.json({ 
           success: true, 
@@ -210,6 +140,20 @@ app.post('/api/upload-file', authenticateToken, async (req, res) => {
       console.error('[Backend] Error uploading file:', error);
       res.status(500).json({ success: false, message: 'Failed to upload file' });
   }
+});
+
+// Endpoint to get all assets
+app.get('/api/assets', authenticateToken, async (req, res) => {
+    try {
+        const assets = await dbService.getAllAssets();
+        res.json({
+            success: true,
+            data: { assets }
+        });
+    } catch (error) {
+        console.error('[Backend] Error fetching assets:', error);
+        res.status(500).json({ success: false, message: 'Failed to fetch assets' });
+    }
 });
 
 

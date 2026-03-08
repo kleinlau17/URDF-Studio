@@ -6,8 +6,26 @@ import {
 import { RobotPreview } from './RobotPreview';
 import { DraggableWindow } from '@/shared/components';
 import { translations } from '@/shared/i18n';
-import { URDF_STUDIO_ASSETS, URDFStudioAsset } from '../data';
 import { useDraggableWindow, useEffectiveTheme } from '@/shared/hooks';
+
+// Define localized interface without thumbnail/urdfPath as requested
+interface URDFStudioAsset {
+  id: string;
+  name: string;
+  author: string;
+  description: string;
+  category: string;
+  stars: number;
+  downloads: number;
+  tags: string[];
+  lastUpdated: string;
+  urdfFile?: string;
+  previewVideo?: string;
+  name_zh?: string;
+  description_zh?: string;
+  tags_zh?: string[];
+  author_zh?: string;
+}
 
 interface URDFGalleryProps {
   onClose: () => void;
@@ -48,28 +66,13 @@ const RobotThumbnail = ({
   theme?: 'light' | 'dark';
   previewLabel: string;
 }) => {
-  // Use 3D preview for server-hosted assets with urdfPath
-  if (asset.urdfPath && !asset.urdfPath.startsWith('http')) {
-    return (
-      <RobotPreview
-        urdfPath={asset.urdfPath}
-        urdfFile={asset.urdfFile}
-        modelId={asset.id}
-        thumbnail={asset.thumbnail}
-        theme={theme}
-        fallbackLabel={previewLabel}
-      />
-    );
-  }
-
-  // Fallback to placeholder for URL-based assets
   return (
-    <div className="flex flex-col items-center justify-center gap-2 text-text-tertiary w-full h-full">
-      <Box className="w-10 h-10 opacity-40" />
-      <span className="text-[9px] uppercase tracking-widest font-medium opacity-60">
-        {previewLabel}
-      </span>
-    </div>
+    <RobotPreview
+      modelId={asset.id}
+      urdfFile={asset.urdfFile}
+      theme={theme}
+      fallbackLabel={previewLabel}
+    />
   );
 };
 
@@ -78,6 +81,29 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [assets, setAssets] = useState<URDFStudioAsset[]>([]);
+  const [isLoadingList, setIsLoadingList] = useState(true);
+
+  // Fetch assets from backend
+  useEffect(() => {
+    const fetchAssets = async () => {
+      try {
+        const token = import.meta.env.VITE_API_TOKEN;
+        const res = await fetch('/api/assets', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const json = await res.json();
+        if (json.success && json.data?.assets) {
+          setAssets(json.data.assets);
+        }
+      } catch (err) {
+        console.error('Failed to load gallery assets:', err);
+      } finally {
+        setIsLoadingList(false);
+      }
+    };
+    fetchAssets();
+  }, []);
   
   // Clear tags when language changes to avoid stale strings
   useEffect(() => {
@@ -87,12 +113,12 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
   // Compute all available tags
   const allTags = useMemo(() => {
     const tags = new Set<string>();
-    URDF_STUDIO_ASSETS.forEach(asset => {
+    assets.forEach(asset => {
       const currentTags = lang === 'zh' && asset.tags_zh ? asset.tags_zh : asset.tags;
       currentTags.forEach(t => tags.add(t));
     });
     return Array.from(tags).sort();
-  }, [lang]);
+  }, [lang, assets]);
 
   const toggleTag = (tag: string) => {
     setSelectedTags(prev => 
@@ -120,11 +146,12 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
 
 
   const handleImportAsset = async (asset: URDFStudioAsset) => {
-    if (!asset.urdfPath) return;
+    // Only import if we have an ID
+    if (!asset.id) return;
     
     setIsDownloading(true);
     try {
-      // Request backend to download asset (e.g. from Baidu Cloud)
+      // Request backend to download asset by ID
       const token = import.meta.env.VITE_API_TOKEN;
       const response = await fetch('/api/download-asset', {
         method: 'POST',
@@ -132,7 +159,7 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ urdfPath: asset.urdfPath }),
+        body: JSON.stringify({ assetId: asset.id }),
       });
 
       if (!response.ok) {
@@ -146,8 +173,8 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
 
       const filesData = result.data.files as { path: string, url: string }[];
       
-      // Determine root folder name based on urdfPath (e.g. "go2_description")
-      const rootFolderName = asset.urdfPath.split('/').filter(Boolean).pop() || asset.id;
+      // Use root folder name provided by backend
+      const rootFolderName = result.data.rootFolderName || asset.id;
 
       // Download all files in parallel
       const fileObjects = await Promise.all(filesData.map(async (fileInfo) => {
@@ -197,7 +224,7 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
   };
 
   const filteredAssets = useMemo(() => {
-    return URDF_STUDIO_ASSETS.filter(asset => {
+    return assets.filter(asset => {
       // 1. Category Filter
       if (selectedCategory !== 'all' && asset.category !== selectedCategory) {
         return false;
@@ -222,7 +249,7 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
 
       return matchesSearch;
     });
-  }, [searchQuery, selectedCategory, selectedTags, lang]);
+  }, [searchQuery, selectedCategory, selectedTags, lang, assets]);
 
   return (
     <>
@@ -357,7 +384,7 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
 
                 {/* Grid */}
                 <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
-                  {filteredAssets.map(asset => (
+                    {filteredAssets.map(asset => (
                     <div key={asset.id} className="group bg-panel-bg rounded-lg border border-border-black hover:border-system-blue overflow-hidden transition-all shadow-sm hover:shadow-lg flex flex-col">
                       {/* Thumbnail Area */}
                       <div className="relative w-full aspect-video overflow-hidden bg-slate-100 dark:bg-black flex items-center justify-center">
@@ -368,7 +395,7 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
                             {getCategoryName(asset.category, t)}
                           </span>
                         </div>
-                        
+
                         {/* Action Overlay */}
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-3 pointer-events-none">
                           <button 
@@ -384,27 +411,27 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
                         <div className="p-3 flex-1 flex flex-col">
                           <div className="flex justify-between items-start mb-1">
                           <h3 className="font-semibold text-sm leading-tight text-text-primary group-hover:text-system-blue transition-colors">
-                            {lang === 'zh' && asset.name_zh ? asset.name_zh : asset.name}
-                          </h3>
+                              {lang === 'zh' && asset.name_zh ? asset.name_zh : asset.name}
+                            </h3>
                           <button className="text-text-tertiary hover:text-rose-500 transition-colors">
                             <Heart className="w-4 h-4" />
                           </button>
-                        </div>
+                            </div>
                         
                         <div className="flex items-center gap-1 text-[10px] text-text-tertiary mb-2">
                           <User className="w-3 h-3" />
                           <span>{lang === 'zh' && asset.author_zh ? asset.author_zh : asset.author}</span>
-                        </div>
-
+                          </div>
+                          
                         <p className="text-xs text-text-secondary line-clamp-2 mb-2 flex-1">
-                          {lang === 'zh' && asset.description_zh ? asset.description_zh : asset.description}
-                        </p>
+                            {lang === 'zh' && asset.description_zh ? asset.description_zh : asset.description}
+                          </p>
 
                         <div className="flex flex-wrap gap-1 mb-2">
                           {(lang === 'zh' && asset.tags_zh ? asset.tags_zh : asset.tags).slice(0, 3).map((tag, idx) => (
                             <span key={idx} className="px-1.5 py-0.5 bg-element-bg text-text-secondary text-[9px] rounded-full">
                               #{tag}
-                            </span>
+                              </span>
                           ))}
                         </div>
 
@@ -420,14 +447,14 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
                             </div>
                           </div>
                           <div className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            <span>{asset.lastUpdated}</span>
+                              <Clock className="w-3 h-3" />
+                              <span>{asset.lastUpdated}</span>
+                            </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
 
                 {filteredAssets.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-16 text-center">

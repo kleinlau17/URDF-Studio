@@ -9,14 +9,12 @@ import { Box, Loader2 } from 'lucide-react';
 import { RobotThumbnail3D } from './RobotThumbnail3D';
 
 // Cache for signed URLs to avoid repeated requests during filtering
-// Key: thumbnail path, Value: { url: string, expiry: timestamp }
+// Key: assetId_type, Value: { url: string, expiry: timestamp }
 const urlCache = new Map<string, { url: string; expiry: number }>();
 const CACHE_DURATION = 1000 * 60 * 30; // 30 minutes cache
 
 interface RobotPreviewProps {
-  urdfPath: string;
   modelId: string;
-  thumbnail?: string;
   urdfFile?: string;
   theme?: 'light' | 'dark';
   fallbackLabel?: string;
@@ -26,13 +24,14 @@ interface RobotPreviewProps {
  * RobotPreview - Tries to load animated preview first, falls back to 3D
  */
 export const RobotPreview: React.FC<RobotPreviewProps> = ({ 
-  urdfPath, 
   modelId,
-  thumbnail,
   urdfFile,
   theme = 'dark',
   fallbackLabel = 'Preview'
 }) => {
+  // If no model ID, just show label or fallback (though modelId is required)
+  if (!modelId) return null;
+
   const [previewType, setPreviewType] = useState<'loading' | 'animated' | '3d'>('loading');
   const [animationUrl, setAnimationUrl] = useState<string | null>(null);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
@@ -60,19 +59,17 @@ export const RobotPreview: React.FC<RobotPreviewProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // Check for pre-recorded animation when visible
+  // Check for pre-recorded animation (thumbnail) when visible
   useEffect(() => {
     if (!isVisible) return;
+    
+    // Reset state when modelId changes
+    setPreviewType('loading');
 
     const checkForAnimation = async () => {
-      // If thumbnail is not provided, fallback to 3D immediately
-      if (!thumbnail) {
-        setPreviewType('3d');
-        return;
-      }
-
       // 1. Check Cache first
-      const cached = urlCache.get(thumbnail);
+      const cacheKey = `${modelId}_thumbnail`;
+      const cached = urlCache.get(cacheKey);
       if (cached && Date.now() < cached.expiry) {
         setAnimationUrl(cached.url);
         setPreviewType('animated');
@@ -88,14 +85,14 @@ export const RobotPreview: React.FC<RobotPreviewProps> = ({
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ filePath: thumbnail }),
+          body: JSON.stringify({ assetId: modelId, fileType: 'thumbnail' }),
         });
 
         if (response.ok) {
           const result = await response.json();
           if (result.success && result.data?.url) {
             // Save to cache
-            urlCache.set(thumbnail, {
+            urlCache.set(cacheKey, {
               url: result.data.url,
               expiry: Date.now() + CACHE_DURATION
             });
@@ -110,12 +107,12 @@ export const RobotPreview: React.FC<RobotPreviewProps> = ({
         console.error('[RobotPreview] Failed to check cloud animation:', e);
       }
       
-      // 3. Fallback to 3D rendering
+      // 3. Fallback to 3D rendering if thumbnail fetch fails
       setPreviewType('3d');
     };
 
     checkForAnimation();
-  }, [urdfPath, isVisible, thumbnail]);
+  }, [modelId, isVisible]);
 
   // Loading state
   if (!isVisible || previewType === 'loading') {
@@ -162,7 +159,7 @@ export const RobotPreview: React.FC<RobotPreviewProps> = ({
   return (
     <div ref={containerRef} className="w-full h-full">
       <RobotThumbnail3D 
-        urdfPath={urdfPath}
+        assetId={modelId}
         urdfFile={urdfFile}
         theme={theme}
       />

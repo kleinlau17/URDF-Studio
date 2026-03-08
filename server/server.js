@@ -6,7 +6,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import * as bosService from './bosService.js';
 import * as dbService from './dbService.js';
-import { INITIAL_ASSETS } from './seedData.js';
+// import { INITIAL_ASSETS } from './seedData.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,7 +36,7 @@ const initializeServices = async () => {
     // DB Service (SQLite via Prisma)
     try {
         await dbService.connect();
-        await dbService.seedData(INITIAL_ASSETS);
+        // await dbService.seedData(INITIAL_ASSETS);
         // Note: With Prisma + SQLite, connection is file-based.
         // Data will be stored in prisma/dev.db by default.
     } catch (error) {
@@ -69,20 +69,33 @@ const authenticateToken = (req, res, next) => {
 
 // Endpoint to handle asset download
 app.post('/api/download-asset', authenticateToken, async (req, res) => {
-  const { urdfPath } = req.body;
+  const { assetId } = req.body;
 
-  if (!urdfPath) {
-     return res.status(400).json({ success: false, message: 'urdfPath is required' });
+  if (!assetId) {
+     return res.status(400).json({ success: false, message: 'assetId is required' });
   }
 
   try {
+      const asset = await dbService.getAssetById(assetId);
+      if (!asset || !asset.urdfPath) {
+          return res.status(404).json({ success: false, message: 'Asset not found or missing URDF path' });
+      }
+      
+      const urdfPath = asset.urdfPath;
       const files = await bosService.listFiles(urdfPath);
+      
+      // Extract root folder name from urdfPath for the frontend
+      // e.g. "/library/urdf/unitree/go2_description" -> "go2_description"
+      const rootFolderName = urdfPath.split('/').filter(Boolean).pop() || 'robot';
 
       res.json({  
           success: true, 
           message: 'Files listed successfully',
           data: {
-              files: files
+              files: files,
+              rootFolderName: rootFolderName,
+              // Backend can also pass the main URDF file name if known, to help frontend
+              urdfFile: asset.urdfFile
           }
       });
   } catch (error) {
@@ -91,15 +104,76 @@ app.post('/api/download-asset', authenticateToken, async (req, res) => {
   }
 });
 
-// Endpoint to get a signed URL for a single file
-app.post('/api/get-signed-url', authenticateToken, async (req, res) => {
-  const { filePath } = req.body;
+// Endpoint to upload thumbnail (path handling on authenticated backend)
+app.post('/api/upload-thumbnail', authenticateToken, async (req, res) => {
+    const { assetId, content, secret } = req.body;
+  
+    if (!assetId || !content) {
+       return res.status(400).json({ success: false, message: 'assetId and content are required' });
+    }
+  
+    // Security: Require Upload Secret
+    if (secret !== process.env.UPLOAD_SECRET) {
+        console.warn(`[Backend Security] Upload attempt with invalid secret`);
+        return res.status(403).json({ success: false, message: 'Invalid upload secret' });
+    }
+  
+    try {
+        const asset = await dbService.getAssetById(assetId);
+        if (!asset || !asset.urdfPath) {
+            return res.status(404).json({ success: false, message: 'Asset not found' });
+        }
+        
+        // Construct file path on backend
+        const fileName = 'thumbnail.png';
+        const urdfPath = asset.urdfPath;
+        const targetPath = urdfPath.endsWith('/') 
+            ? `${urdfPath}${fileName}` 
+            : `${urdfPath}/${fileName}`;
+            
+        await bosService.uploadFile(targetPath, content);
+  
+        res.json({ 
+            success: true, 
+            message: 'Thumbnail uploaded successfully'
+        });
+    } catch (error) {
+        console.error('[Backend] Error uploading thumbnail:', error);
+        res.status(500).json({ success: false, message: 'Failed to upload thumbnail' });
+    }
+  });
 
-  if (!filePath) {
-     return res.status(400).json({ success: false, message: 'filePath is required' });
+// Endpoint to get a signed URL for a single file (e.g. thumbnail or video)
+app.post('/api/get-signed-url', authenticateToken, async (req, res) => {
+  const { assetId, fileType } = req.body;
+
+  if (!assetId) {
+     return res.status(400).json({ success: false, message: 'assetId is required' });
   }
 
   try {
+      const asset = await dbService.getAssetById(assetId);
+      if (!asset) {
+          return res.status(404).json({ success: false, message: 'Asset not found' });
+      }
+
+      let filePath;
+      if (fileType === 'thumbnail') {
+          // If asset has explicit thumbnail path, use it, otherwise guess
+          // Current logic in data.ts uses exact paths.
+          // We can use the detailed path from DB.
+          filePath = asset.thumbnail;
+      } else if (fileType === 'previewVideo') {
+          filePath = asset.previewVideo;
+      } else {
+          // Fallback or specific file request if we want to support it
+           return res.status(400).json({ success: false, message: 'Invalid or missing fileType' });
+      }
+
+      if (!filePath) {
+          return res.status(404).json({ success: false, message: 'File path not found for this asset' });
+      }
+
       const downloadUrl = await bosService.getSignedUrl(filePath);
 
       res.json({ 
@@ -117,10 +191,10 @@ app.post('/api/get-signed-url', authenticateToken, async (req, res) => {
 
 // Endpoint to avoid CORS problems)
 app.post('/api/upload-file', authenticateToken, async (req, res) => {
-  const { filePath, content, secret } = req.body;
+  const { assetId, relativePath, content, secret } = req.body;
 
-  if (!filePath || !content) {
-     return res.status(400).json({ success: false, message: 'filePath and content are required' });
+  if (!assetId || !relativePath || !content) {
+     return res.status(400).json({ success: false, message: 'assetId, relativePath and content are required' });
   }
 
   // Security: Require Upload Secret
@@ -130,7 +204,18 @@ app.post('/api/upload-file', authenticateToken, async (req, res) => {
   }
 
   try {
-      await bosService.uploadFile(filePath, content);
+      const asset = await dbService.getAssetById(assetId);
+      if (!asset || !asset.urdfPath) {
+          return res.status(404).json({ success: false, message: 'Asset not found or missing URDF path' });
+      }
+
+      // Construct file path on backend, joining urdfPath with relativePath
+      // Normalize slashes
+      const urdfPath = asset.urdfPath.endsWith('/') ? asset.urdfPath : `${asset.urdfPath}/`;
+      const cleanRelativePath = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+      const targetPath = urdfPath + cleanRelativePath;
+
+      await bosService.uploadFile(targetPath, content);
 
       res.json({ 
           success: true, 

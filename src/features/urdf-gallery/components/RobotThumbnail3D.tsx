@@ -13,12 +13,10 @@ import { SceneLighting } from '@/shared/components/3d';
 import { createLoadingManager, createMeshLoader, buildAssetIndex, resetUnitDetection } from '@/core/loaders';
 
 interface RobotThumbnail3DProps {
-  urdfPath: string;
+  assetId: string;
   urdfFile?: string;
   theme?: 'light' | 'dark';
 }
-
-const THUMBNAIL_FILENAME = 'thumbnail.png';
 
 // Helper to convert DataURL to Blob
 const dataURLtoBlob = (dataurl: string) => {
@@ -219,7 +217,7 @@ function setupRobotScene(robot: THREE.Object3D, camera: THREE.PerspectiveCamera)
   camera.updateProjectionMatrix();
 }
 
-export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ urdfPath, urdfFile, theme = 'dark' }) => {
+export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ assetId, urdfFile, theme = 'dark' }) => {
   const [status, setStatus] = useState<'init' | 'checking' | 'found-image' | 'generating' | 'error'>('init');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [fileList, setFileList] = useState<Array<{path: string, url: string}> | null>(null);
@@ -241,7 +239,7 @@ export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ urdfPath, ur
 
   // Main logic
   useEffect(() => {
-    if (!isVisible || status !== 'init') return;
+    if (!isVisible || status !== 'init' || !assetId) return;
 
     const checkFiles = async () => {
       setStatus('checking');
@@ -253,7 +251,7 @@ export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ urdfPath, ur
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json' 
           },
-          body: JSON.stringify({ urdfPath })
+          body: JSON.stringify({ assetId })
         });
         
         const data = await res.json();
@@ -271,7 +269,7 @@ export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ urdfPath, ur
     };
 
     checkFiles();
-  }, [isVisible, urdfPath, status]);
+  }, [isVisible, assetId, status]);
 
   const handleCapture = async (dataUrl: string) => {
     // 1. Show captured image immediately
@@ -281,11 +279,8 @@ export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ urdfPath, ur
     // 2. Upload in background via backend proxy (avoids CORS issues)
     try {
       const token = (import.meta as any).env.VITE_API_TOKEN;
-      const targetPath = urdfPath.endsWith('/') 
-          ? `${urdfPath}${THUMBNAIL_FILENAME}` 
-          : `${urdfPath}/${THUMBNAIL_FILENAME}`;
       
-      // Upload directly to backend
+      // Upload directly to backend using assetId and relative path
       const secret = import.meta.env.VITE_UPLOAD_SECRET;
       
       const res = await fetch('/api/upload-file', {
@@ -295,7 +290,8 @@ export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ urdfPath, ur
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
-           filePath: targetPath,
+           assetId: assetId,
+           relativePath: 'thumbnail.png',
            content: dataUrl,
            secret: secret || '' // Optional extra secret for admin-only upload
         })
@@ -304,7 +300,7 @@ export const RobotThumbnail3D: React.FC<RobotThumbnail3DProps> = ({ urdfPath, ur
       const json = await res.json();
       if (!json.success) throw new Error(json.message);
 
-      console.log('Thumbnail uploaded successfully:', targetPath);
+      console.log('Thumbnail uploaded successfully for asset:', assetId);
     } catch (e) {
       console.error('Failed to upload thumbnail:', e);
       // We still show the generated image, it just won't be persisted for next time

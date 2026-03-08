@@ -173,6 +173,20 @@ export const URDFGallery: React.FC<URDFGalleryProps> = ({ onClose, lang, onImpor
 
       const filesData = result.data.files as { path: string, url: string }[];
       
+      // Reorder logic: prioritize URDF file if specified
+      if (asset.urdfFile) {
+        const preferredIndex = filesData.findIndex((file) => (
+          file.path === asset.urdfFile ||
+          file.path.endsWith(`/${asset.urdfFile}`) ||
+          file.path.split('/').pop() === asset.urdfFile
+        ));
+
+        if (preferredIndex > 0) {
+          const [preferredFile] = filesData.splice(preferredIndex, 1);
+          filesData.unshift(preferredFile);
+        }
+      }
+      
       // Use root folder name provided by backend
       const rootFolderName = result.data.rootFolderName || asset.id;
 

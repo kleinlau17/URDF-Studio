@@ -17,4 +17,4 @@ AGENTS.md
 
 test/
 
-*.db
+#*.db
